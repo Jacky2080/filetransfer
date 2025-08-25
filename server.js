@@ -1,21 +1,28 @@
-// import https from 'https';
+import https from 'https';
 import http from 'http';
 import fs from 'fs/promises';
 import path from 'path';
 import express from 'express';
 import helmet from 'helmet';
+import notifier from 'node-notifier';
+import EventEmitter from 'events';
 
-// // Path to the SSL/TLS certificate and key
-// const sslOptions = {
-//   key: await fs.readFile(path.normalize('D:/code/filetransfer/key.pem')),
-//   cert: await fs.readFile(path.normalize( 'D:/code/filetransfer/cert.pem')),
-//   // Enable HTTP/2 if available
-//   allowHTTP1: true,
-//   // Recommended security options
-//   minVersion: 'TLSv1.2',
-//   ciphers: ['TLS_AES_256_GCM_SHA384', 'TLS_CHACHA20_POLY1305_SHA256', 'TLS_AES_128_GCM_SHA256', 'ECDHE-RSA-AES128-GCM-SHA256', '!DSS', '!aNULL', '!eNULL', '!EXPORT', '!DES', '!RC4', '!3DES', '!MD5', '!PSK'].join(':'),
-//   honorCipherOrder: true
-// };
+function getDate() {
+  const now = new Date();
+  return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+} 
+
+// Path to the SSL/TLS certificate and key
+const sslOptions = {
+  key: await fs.readFile(path.normalize('D:/code/filetransfer/key.pem')),
+  cert: await fs.readFile(path.normalize( 'D:/code/filetransfer/cert.pem')),
+  // Enable HTTP/2 if available
+  allowHTTP1: true,
+  // Recommended security options
+  minVersion: 'TLSv1.2',
+  ciphers: ['TLS_AES_256_GCM_SHA384', 'TLS_CHACHA20_POLY1305_SHA256', 'TLS_AES_128_GCM_SHA256', 'ECDHE-RSA-AES128-GCM-SHA256', '!DSS', '!aNULL', '!eNULL', '!EXPORT', '!DES', '!RC4', '!3DES', '!MD5', '!PSK'].join(':'),
+  honorCipherOrder: true
+};
 
 const app = express();
 
@@ -51,9 +58,8 @@ app.use(express.static(path.normalize('d:/code/filetransfer'), {
   redirect: true
 }));
 
-const htmlContent = await fs.readFile(path.normalize('d:/code/filetransfer/index.html'), 'utf8');
-
-app.get('/filetransfer', (req, res) => {
+app.get('/filetransfer', async (req, res) => {
+  const htmlContent = await fs.readFile(path.normalize('d:/code/filetransfer/index.html'), 'utf8');
   res.type('html').send(htmlContent);
 });
 
@@ -81,12 +87,23 @@ app.get('/filetransfer/scripts.js', async (req, res) => {
   }
 });
 
+app.get('/files', async (req, res) => {
+  try {
+    let files = await fs.readdir('d:/code/filetransfer/files');
+    files = files.map((val, idx) => {return {'index': idx, 'name': val}})
+    res.end(JSON.stringify(files));
+    await fs.appendFile('d:/code/filetransfer/server.log', `${getDate()} Sent file list\n`);
+  } catch (e) {
+    console.log(e);
+  }
+})
+
 app.post('/filetransfer/text', express.text(), (req, res) => {
   try {
     console.log(`text received: ${req.body}`);
-    const now = new Date();
-    fs.appendFile(path.normalize('d:/code/filetransfer/text.log'), `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}\n${req.body}\n\n`, 'utf8');
+    fs.appendFile(path.normalize('d:/code/filetransfer/text.log'), `${getDate()}\n${req.body}\n\n`, 'utf8');
     res.end('text received');
+    fs.appendFile('d:/code/filetransfer/server.log', `${getDate()} Received text: ${req.body}\n`);
   } catch (e) {
     console.log(e);
   }
@@ -108,14 +125,23 @@ app.post('/filetransfer/file', express.raw({type: 'application/octet-stream'}), 
     fs.writeFile(path.join(path.normalize('d:/code/filetransfer/files'), fileName), req.body);
     console.log(`file ${fileName} received`);
     res.end(`file ${fileName} received`);
+    notifier.notify({
+      title: 'File received',
+      message: `File ${fileName} received`,
+      appID: 'com.node.filetransfer',
+      timeout: 3,
+      icon: null,
+      sound: false
+    });
+    await fs.appendFile('d:/code/filetransfer/server.log', `${getDate()} Received file ${fileName}\n`);
   } catch (e) {
     console.log(e);
   }
 });
 
 const PORT = 3000;
-// const server = https.createServer(sslOptions, app);
-const server = http.createServer(app);
+const server = https.createServer(sslOptions, app);
+// const server = http.createServer(app);
 
 const HOST = '0.0.0.0';
 server.listen(PORT, HOST, () => {

@@ -12,7 +12,7 @@ form {
 label {
   font-size: 18px;
   padding: 20px;
-  display: inline-block;
+  font-weight: bold;
 }
 
 textarea {
@@ -35,7 +35,6 @@ textarea {
 
 #textBtn {
   display: block;
-  /* float: left; */
   margin: 0 20px;
 }
 
@@ -46,4 +45,71 @@ button {
   border: 1px solid #D48D21;
   border-radius: 5px;
   padding: 3px 8px;
+}
+
+h3 {
+  margin: 0 0 10px 20px;
+}
+
+#files {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 5px;
+  margin: 0 20px 10px;
+}
+
+.options {
+  display: flex;
+}
+
+.checkbox-label {
+  font-weight: normal;
+  padding: 0;
+  max-width: calc(550px / 3 - 25px);
+  display: inline-block;
+  white-space: nowrap;
+  overflow-y: scroll;
+}
+
+::-webkit-scrollbar {
+  display: none;
+  width: 0;
+}
+
+.checkbox-input {
+  margin: 3px;
+}
+
+@media (max-width: 620px) {
+  #files {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  form {
+    width: 450px;
+  }
+
+  textarea {
+    width: 350px;
+    height: 210px;
+  }
+
+  .checkbox-label {
+    max-width: calc(405px / 2 - 25px);
+  }
+}
+
+@media (max-width: 460px) {
+  form {
+    width: 300px;
+  }
+
+  textarea {
+    width: 210px;
+    height: 125px;
+  }
+
+  .checkbox-label {
+    max-width: calc(255px / 2 - 25px);
+  }
 }
