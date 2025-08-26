@@ -8,15 +8,23 @@
     </head>
     <body>
         <form>
-            <label for="text">Enter Text</label>
-            <textarea id="text" placeholder="Input text here" autocorrect="off"></textarea>
-            <button type="button" id="textBtn">Send</button>
-            <label for="file">Select File</label>
-            <input type="file" id="file" multiple="true">
-            <button type="button" id="fileBtn">Send</button>
-            <h3>Fetch File</h3>
-            <div id="files"></div>
+            <div>
+                <label for="text">Enter Text</label>
+                <textarea id="text" placeholder="Input text here" autocorrect="off"></textarea>
+                <button type="button" id="textBtn">Send</button>
+            </div>
+            <div>
+                <label for="file">Select File</label>
+                <input type="file" id="file" multiple="true">
+                <button type="button" id="fileBtn">Send</button>
+            </div>
+            <div>
+                <h3>Fetch File</h3>
+                <div id="files"></div>
+                <button type="button" id="fetchBtn">Fetch</button>
+            </div>
         </form>
+        <footer>&copy; 2025 Jacky</footer>
         <script src="/filetransfer/scripts.js"></script>
     </body>
 </html>

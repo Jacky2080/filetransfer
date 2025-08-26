@@ -1,15 +1,18 @@
 import https from 'https';
 import http from 'http';
 import fs from 'fs/promises';
+import { createReadStream,createWriteStream } from 'fs';
 import path from 'path';
 import express from 'express';
 import helmet from 'helmet';
 import notifier from 'node-notifier';
-import EventEmitter from 'events';
+import { pipeline } from 'stream/promises';
+
+const logFile = 'd:/code/filetransfer/server.log';
 
 function getDate() {
   const now = new Date();
-  return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+  return `[${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}]`;
 } 
 
 // Path to the SSL/TLS certificate and key
@@ -43,10 +46,6 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.text({ limit: '50mb' }));
-app.use(express.raw({
-  type: 'application/octet-stream',
-  limit: '1gb'
-}));
 
 // Serve static files from 'filetransfer' directory
 app.use(express.static(path.normalize('d:/code/filetransfer'), {
@@ -87,55 +86,117 @@ app.get('/filetransfer/scripts.js', async (req, res) => {
   }
 });
 
+// return file list
+const filePromises = new Set();
+let fileList;
 app.get('/files', async (req, res) => {
   try {
-    let files = await fs.readdir('d:/code/filetransfer/files');
-    files = files.map((val, idx) => {return {'index': idx, 'name': val}})
-    res.end(JSON.stringify(files));
-    await fs.appendFile('d:/code/filetransfer/server.log', `${getDate()} Sent file list\n`);
+    if (filePromises.size > 0) {
+      await Promise.all(filePromises);
+    }
+
+    // create directory if doesn't exist
+    try {
+      await fs.access('d:/code/filetransfer/files');
+      fileList = await fs.readdir('d:/code/filetransfer/files');
+      fileList = fileList.map((val, idx) => {return {'index': idx, 'name': val}})
+    } catch {
+      fs.mkdir('d:/code/filetransfer/files');
+      await fs.appendFile(logFile, `${getDate()} Directory /files doesn't exist, created one\n`);
+      fileList = [];
+    } finally {
+      res.end(JSON.stringify(fileList));
+      await fs.appendFile(logFile, `${getDate()} Sent file list, ${fileList.length} file(s) found\n`);
+    }
   } catch (e) {
     console.log(e);
+    await fs.appendFile(logFile, `${getDate()} [error] Error sending file list: ${e}\n`);
   }
 })
 
+// handle text posts
 app.post('/filetransfer/text', express.text(), (req, res) => {
   try {
     console.log(`text received: ${req.body}`);
     fs.appendFile(path.normalize('d:/code/filetransfer/text.log'), `${getDate()}\n${req.body}\n\n`, 'utf8');
     res.end('text received');
-    fs.appendFile('d:/code/filetransfer/server.log', `${getDate()} Received text: ${req.body}\n`);
+    fs.appendFile(logFile, `${getDate()} Received text: ${JSON.stringify(req.body)}\n`);
   } catch (e) {
     console.log(e);
+    fs.appendFile(logFile, `${getDate()} [error] Error receiving text: ${e}\n`);
   }
 });
 
-app.post('/filetransfer/file', express.raw({type: 'application/octet-stream'}), async (req, res) => {
+// handle file posts
+app.post('/filetransfer/file', async (req, res) => {
+  let fileName = '';
   try {
     console.log('receiving file');
-    let fileName = decodeURIComponent(req.headers['x-filename']);
+    await fs.appendFile(logFile, `${getDate()} Start receiving file\n`);
+    fileName = decodeURIComponent(req.headers['x-filename']);
+
+    // handle repeated file names
     const fileExt = path.extname(fileName);
     fileName = path.basename(fileName, fileExt);
-    let i = 0;
-    while (true) {
-      try {
-        await fs.access(path.join(path.normalize('d:/code/filetransfer/files'), fileName + `${i === 0 ? '' : `_${i}`}` + fileExt));
-        i++;
-      } catch {fileName = fileName + `${i === 0 ? '' : `_${i}`}` + fileExt; break;}
+    try {
+      await fs.access('d:/code/filetransfer/files');
+      let i = 0;
+      while (true) {
+        try {
+          await fs.access(path.join(path.normalize('d:/code/filetransfer/files'), fileName + `${i === 0 ? '' : `_${i}`}` + fileExt));
+          i++;
+        } catch {fileName = fileName + `${i === 0 ? '' : `_${i}`}` + fileExt; break;}
+      }
+    } catch {
+      await fs.mkdir('d:/code/filetransfer/files');
+      fileName = fileName + fileExt;
     }
-    fs.writeFile(path.join(path.normalize('d:/code/filetransfer/files'), fileName), req.body);
-    console.log(`file ${fileName} received`);
+
+    // write file with stream
+    const writeStream = createWriteStream(path.join(path.normalize('d:/code/filetransfer/files'), fileName));
+    const pipelineStream =  pipeline(req, writeStream);
+    filePromises.add(pipelineStream);
+    await pipelineStream;
     res.end(`file ${fileName} received`);
+    console.log(`file ${fileName} received`);
+    filePromises.delete(pipelineStream);
+
+    // send system notification and write into log
     notifier.notify({
       title: 'File received',
       message: `File ${fileName} received`,
       appID: 'com.node.filetransfer',
-      timeout: 3,
+      timeout: 1,
       icon: null,
       sound: false
     });
-    await fs.appendFile('d:/code/filetransfer/server.log', `${getDate()} Received file ${fileName}\n`);
+    await fs.appendFile(logFile, `${getDate()} Received file "${fileName}"\n`);
   } catch (e) {
     console.log(e);
+    await fs.appendFile(logFile, `${getDate()} [error] Error receiving file "${fileName}": ${e}\n`);
+  }
+});
+
+// handle download file request
+app.get('/filetransfer/download', async (req, res) => {
+  const id = req.query.id;
+  fileList = await fs.readdir('d:/code/filetransfer/files');
+  const fileName = fileList[id];
+  await fs.appendFile(logFile, `${getDate()} Start sending file "${fileName}" to download\n`);
+  const filePath = `d:/code/filetransfer/files/${fileName}`;
+  const stats = await fs.stat(filePath);
+  res.writeHead(200, {
+    'Content-Type': 'application/octet-stream',
+    'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
+    'Content-Length': stats.size
+  });
+  const readStream = createReadStream(filePath);
+  try {
+    await pipeline(readStream, res);
+    await fs.appendFile(logFile, `${getDate()} Sent file "${fileName}" to download\n`);
+  } catch (e) {
+    console.log(e);
+    await fs.appendFile(logFile, `${getDate()} [error] ${e}\n`);
   }
 });
 

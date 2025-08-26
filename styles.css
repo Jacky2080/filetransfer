@@ -6,12 +6,15 @@ html, body {
 form {
   border: 1px solid #ddd;
   margin: 20px auto;
+  padding: 15px 0;
   width: 600px;
+  display: flex;
+  flex-direction: column;
 }
 
 label {
   font-size: 18px;
-  padding: 20px;
+  padding: 0 0 0 20px;
   font-weight: bold;
 }
 
@@ -78,6 +81,18 @@ h3 {
 
 .checkbox-input {
   margin: 3px;
+}
+
+#fetchBtn {
+  display: block;
+  margin: 0 20px;
+  float: right;
+}
+
+footer {
+  text-align: center;
+  color: #888;
+  margin-top: 30px;
 }
 
 @media (max-width: 620px) {
