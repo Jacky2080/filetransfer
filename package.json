@@ -1,0 +1,25 @@
+{
+  "name": "filetransfer",
+  "version": "1.0.0",
+  "description": "a simple file transfer webpage in local network",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jacky2080/filetransfer.git"
+  },
+  "author": "Jacky",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Jacky2080/filetransfer/issues"
+  },
+  "homepage": "https://github.com/Jacky2080/filetransfer#readme",
+  "dependencies": {
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "node-notifier": "^10.0.1"
+  }
+}
