@@ -46,6 +46,7 @@ async function postFile(f, i) {
     }, 1500);
   } catch (error) {
     console.log(error);
+    alert(error.message);
   }
 }
 
@@ -88,7 +89,7 @@ async function downloadFiles(id) {
   a.href = `/filetransfer/download?${params.toString()}`;
   // a.download = fileName;
   a.click();
-  console.log(`file "${fileName}" downloaded`);
+  console.log(`file id=${id} downloaded`);
 }
 
 fetchBtn.addEventListener("click", () => {

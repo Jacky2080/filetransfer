@@ -13,11 +13,13 @@
   },
   "author": "Jacky",
   "license": "MIT",
+  "type": "module",
   "bugs": {
     "url": "https://github.com/Jacky2080/filetransfer/issues"
   },
   "homepage": "https://github.com/Jacky2080/filetransfer#readme",
   "dependencies": {
+    "dotenv": "^16.4.5",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
     "node-notifier": "^10.0.1"

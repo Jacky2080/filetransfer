@@ -7,6 +7,9 @@ import express from "express";
 import helmet from "helmet";
 import notifier from "node-notifier";
 import { pipeline } from "stream/promises";
+import os from "os";
+import { config } from "dotenv";
+config();
 
 const LOG_FILE = "d:/code/filetransfer/server.log";
 const FILE_DIR = "d:/code/filetransfer/files";
@@ -96,7 +99,17 @@ app.use(
   express.static(path.normalize("d:/code/filetransfer"), {
     dotfiles: "ignore",
     etag: true,
-    extensions: ["html", "js", "css"],
+    extensions: ["js", "css"],
+    maxAge: "1m",
+    redirect: true,
+  })
+);
+
+app.use(
+  express.static(path.normalize("d:/code/filetransfer"), {
+    dotfiles: "ignore",
+    etag: true,
+    extensions: ["html"],
     maxAge: "1m",
     redirect: true,
   })
@@ -141,6 +154,7 @@ app.post("/filetransfer/text", express.text(), async (req, res) => {
 // POST /filetransfer/file -> receive file
 app.post("/filetransfer/file", async (req, res) => {
   let fileName = "";
+  let pipelineStream;
   try {
     await ensureDir(FILE_DIR);
     console.log("receiving file");
@@ -154,12 +168,11 @@ app.post("/filetransfer/file", async (req, res) => {
 
     // write file with stream
     const writeStream = createWriteStream(path.join(path.normalize("d:/code/filetransfer/files"), fileName));
-    const pipelineStream = pipeline(req, writeStream);
+    pipelineStream = pipeline(req, writeStream);
     filePromises.add(pipelineStream);
     await pipelineStream;
     res.send(`file ${fileName} received`);
     console.log(`file ${fileName} received`);
-    filePromises.delete(pipelineStream);
 
     // send system notification and write into log
     notifier.notify({
@@ -175,6 +188,8 @@ app.post("/filetransfer/file", async (req, res) => {
     console.log(e);
     res.status(500).send("Failed to receive file");
     await log(`[error] Failed to receive file: ${e}`);
+  } finally {
+    filePromises.delete(pipelineStream);
   }
 });
 
@@ -211,10 +226,16 @@ app.get("/filetransfer/download", async (req, res) => {
 });
 
 // Start  server
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const server = https.createServer(sslOptions, app);
 // const server = app;
-const HOST = "0.0.0.0";
+const HOST = process.env.HOST || "0.0.0.0";
 server.listen(PORT, HOST, () => {
-  console.log(`Express server running at http://${HOST}:${PORT}`);
+  const result = [];
+  for (let net of Object.values(os.networkInterfaces()["WLAN"])) {
+    if (net.family === "IPv4" && !net.internal) {
+      result.push(net.address);
+    }
+  }
+  console.log(`Express server running at https://${HOST}:${PORT}, or visit at https://${result[0]}:${PORT}`);
 });

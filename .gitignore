@@ -2,3 +2,4 @@
 files/
 *.pem
 node_modules/
+.env
