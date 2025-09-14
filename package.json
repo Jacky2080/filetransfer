@@ -7,6 +7,9 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js"
   },
+  "bin": {
+    "filetransfer": "./server.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Jacky2080/filetransfer.git"

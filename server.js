@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import https from "https";
 import http from "http";
 import fs from "fs/promises";
@@ -18,7 +19,12 @@ const STATIC_DIR = "d:/code/filetransfer";
 // Return the formatted present date
 function getDate() {
   const now = new Date();
-  return `[${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}-${now.getDate()} ${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}]`;
+  return `[${now.getFullYear()}-${(now.getMonth() + 1)
+    .toString()
+    .padStart(2, "0")}-${now.getDate()} ${now.getHours().toString().padStart(2, "0")}:${now
+    .getMinutes()
+    .toString()
+    .padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}]`;
 }
 
 /**
@@ -71,7 +77,21 @@ const sslOptions = {
   allowHTTP1: true,
   // Recommended security options
   minVersion: "TLSv1.2",
-  ciphers: ["TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256", "TLS_AES_128_GCM_SHA256", "ECDHE-RSA-AES128-GCM-SHA256", "!DSS", "!aNULL", "!eNULL", "!EXPORT", "!DES", "!RC4", "!3DES", "!MD5", "!PSK"].join(":"),
+  ciphers: [
+    "TLS_AES_256_GCM_SHA384",
+    "TLS_CHACHA20_POLY1305_SHA256",
+    "TLS_AES_128_GCM_SHA256",
+    "ECDHE-RSA-AES128-GCM-SHA256",
+    "!DSS",
+    "!aNULL",
+    "!eNULL",
+    "!EXPORT",
+    "!DES",
+    "!RC4",
+    "!3DES",
+    "!MD5",
+    "!PSK",
+  ].join(":"),
   honorCipherOrder: true,
 };
 
@@ -86,7 +106,10 @@ app.use(express.text({ limit: "50mb" }));
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, HEAD, POST");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Filename, X-Filesize, X-Filetype");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Filename, X-Filesize, X-Filetype"
+  );
   if (req.method === "OPTIONS") {
     return res.sendStatus(200);
   }
@@ -167,7 +190,9 @@ app.post("/filetransfer/file", async (req, res) => {
     fileName = await getUniqueFileName(FILE_DIR, baseName, fileExt);
 
     // write file with stream
-    const writeStream = createWriteStream(path.join(path.normalize("d:/code/filetransfer/files"), fileName));
+    const writeStream = createWriteStream(
+      path.join(path.normalize("d:/code/filetransfer/files"), fileName)
+    );
     pipelineStream = pipeline(req, writeStream);
     filePromises.add(pipelineStream);
     await pipelineStream;
@@ -237,5 +262,23 @@ server.listen(PORT, HOST, () => {
       result.push(net.address);
     }
   }
-  console.log(`Express server running at https://${HOST}:${PORT}, or visit at https://${result[0]}:${PORT}`);
+  console.log(
+    `Express server running at https://${HOST}:${PORT}, or visit at https://${result[0]}:${PORT}`
+  );
+});
+
+// shut down
+process.on("SIGINT", () => {
+  console.log("Received SIGINT. Closing server...");
+  server.close(() => {
+    console.log("Sercer closed");
+    process.exit(0);
+  });
+});
+process.on("SIGTERM", () => {
+  console.log("Received SIGTERM. Closing server...");
+  server.close(() => {
+    console.log("Sercer closed");
+    process.exit(0);
+  });
 });
