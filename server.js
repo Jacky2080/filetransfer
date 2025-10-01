@@ -12,9 +12,9 @@ import os from "os";
 import { config } from "dotenv";
 config();
 
-const LOG_FILE = "d:/code/filetransfer/server.log";
-const FILE_DIR = "d:/code/filetransfer/files";
-const STATIC_DIR = "d:/code/filetransfer";
+const LOG_FILE = "/home/admin/code/filetransfer/server.log";
+const FILE_DIR = "/home/admin/code/filetransfer/files";
+const STATIC_DIR = "/home/admin/code/filetransfer";
 
 // Return the formatted present date
 function getDate() {
@@ -69,35 +69,35 @@ async function getUniqueFileName(dir, name, ext) {
   return uniqueName;
 }
 
-// HTTPS configuration
-const sslOptions = {
-  key: await fs.readFile(path.normalize("D:/code/filetransfer/key.pem")),
-  cert: await fs.readFile(path.normalize("D:/code/filetransfer/cert.pem")),
-  // Enable HTTP/2 if available
-  allowHTTP1: true,
-  // Recommended security options
-  minVersion: "TLSv1.2",
-  ciphers: [
-    "TLS_AES_256_GCM_SHA384",
-    "TLS_CHACHA20_POLY1305_SHA256",
-    "TLS_AES_128_GCM_SHA256",
-    "ECDHE-RSA-AES128-GCM-SHA256",
-    "!DSS",
-    "!aNULL",
-    "!eNULL",
-    "!EXPORT",
-    "!DES",
-    "!RC4",
-    "!3DES",
-    "!MD5",
-    "!PSK",
-  ].join(":"),
-  honorCipherOrder: true,
-};
+// // HTTPS configuration
+// const sslOptions = {
+//   key: await fs.readFile(path.normalize("/home/admin/code/filetransfer/key.pem")),
+//   cert: await fs.readFile(path.normalize("/home/admin/code/filetransfer/cert.pem")),
+//   // Enable HTTP/2 if available
+//   allowHTTP1: true,
+//   // Recommended security options
+//   minVersion: "TLSv1.2",
+//   ciphers: [
+//     "TLS_AES_256_GCM_SHA384",
+//     "TLS_CHACHA20_POLY1305_SHA256",
+//     "TLS_AES_128_GCM_SHA256",
+//     "ECDHE-RSA-AES128-GCM-SHA256",
+//     "!DSS",
+//     "!aNULL",
+//     "!eNULL",
+//     "!EXPORT",
+//     "!DES",
+//     "!RC4",
+//     "!3DES",
+//     "!MD5",
+//     "!PSK",
+//   ].join(":"),
+//   honorCipherOrder: true,
+// };
 
 // Express setup
 const app = express();
-app.use(helmet());
+// app.use(helmet());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(express.text({ limit: "50mb" }));
@@ -119,7 +119,7 @@ app.use((req, res, next) => {
 // Serve static files
 app.use(
   "/filetransfer",
-  express.static(path.normalize("d:/code/filetransfer"), {
+  express.static(path.normalize("/home/admin/code/filetransfer"), {
     dotfiles: "ignore",
     etag: true,
     extensions: ["js", "css"],
@@ -129,7 +129,7 @@ app.use(
 );
 
 app.use(
-  express.static(path.normalize("d:/code/filetransfer"), {
+  express.static(path.normalize("/home/admin/code/filetransfer"), {
     dotfiles: "ignore",
     etag: true,
     extensions: ["html"],
@@ -191,7 +191,7 @@ app.post("/filetransfer/file", async (req, res) => {
 
     // write file with stream
     const writeStream = createWriteStream(
-      path.join(path.normalize("d:/code/filetransfer/files"), fileName)
+      path.join(path.normalize("/home/admin/code/filetransfer/files"), fileName)
     );
     pipelineStream = pipeline(req, writeStream);
     filePromises.add(pipelineStream);
@@ -252,19 +252,20 @@ app.get("/filetransfer/download", async (req, res) => {
 
 // Start  server
 const PORT = process.env.PORT || 3000;
-const server = https.createServer(sslOptions, app);
-// const server = app;
+// const server = https.createServer(sslOptions, app);
+const server = app;
 const HOST = process.env.HOST || "0.0.0.0";
 server.listen(PORT, HOST, () => {
-  const result = [];
-  for (let net of Object.values(os.networkInterfaces()["WLAN"])) {
-    if (net.family === "IPv4" && !net.internal) {
-      result.push(net.address);
-    }
-  }
-  console.log(
-    `Express server running at https://${HOST}:${PORT}, or visit at https://${result[0]}:${PORT}`
-  );
+  // const result = [];
+  // for (let net of Object.values(os.networkInterfaces()["WLAN"])) {
+  //   if (net.family === "IPv4" && !net.internal) {
+  //     result.push(net.address);
+  //   }
+  // }
+  // console.log(
+  //   `Express server running at https://${HOST}:${PORT}, or visit at https://${result[0]}:${PORT}`
+  // );
+  console.log(`Express server running at http://${HOST}:${PORT}`);
 });
 
 // shut down
