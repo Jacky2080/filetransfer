@@ -5,6 +5,7 @@ import fs from "fs/promises";
 import { createReadStream, createWriteStream } from "fs";
 import path from "path";
 import express from "express";
+import session from "express-session";
 import helmet from "helmet";
 import notifier from "node-notifier";
 import { pipeline } from "stream/promises";
@@ -12,9 +13,9 @@ import os from "os";
 import { config } from "dotenv";
 config();
 
-const LOG_FILE = "d:/code/filetransfer/server.log";
-const FILE_DIR = "d:/code/filetransfer/files";
-const STATIC_DIR = "d:/code/filetransfer";
+const DIR = import.meta.dirname;
+const LOG_FILE = path.join(DIR, "server.log");
+const FILE_DIR = path.join(DIR, "files/");
 
 // Return the formatted present date
 function getDate() {
@@ -71,8 +72,8 @@ async function getUniqueFileName(dir, name, ext) {
 
 // HTTPS configuration
 const sslOptions = {
-  key: await fs.readFile(path.normalize("D:/code/filetransfer/key.pem")),
-  cert: await fs.readFile(path.normalize("D:/code/filetransfer/cert.pem")),
+  key: await fs.readFile(path.join(DIR, "key/key.pem")),
+  cert: await fs.readFile(path.join(DIR, "key/cert.pem")),
   // Enable HTTP/2 if available
   allowHTTP1: true,
   // Recommended security options
@@ -98,9 +99,9 @@ const sslOptions = {
 // Express setup
 const app = express();
 app.use(helmet());
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
-app.use(express.text({ limit: "50mb" }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.text());
 
 // CORS & Preflight
 app.use((req, res, next) => {
@@ -116,27 +117,64 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(
+  session({
+    secret: process.env.SESSION_KEY,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: false,
+      maxAge: null,
+    },
+  })
+);
+
 // Serve static files
 app.use(
-  "/filetransfer",
-  express.static(path.normalize("d:/code/filetransfer"), {
+  "/fail",
+  express.static(path.join(DIR, "frontend/fail"), {
     dotfiles: "ignore",
     etag: true,
-    extensions: ["js", "css"],
-    maxAge: "1m",
+    extensions: ["html"],
+    index: "fail.html",
+    maxAge: "1h",
     redirect: true,
   })
 );
 
 app.use(
-  express.static(path.normalize("d:/code/filetransfer"), {
+  express.static(path.join(DIR, "frontend"), {
     dotfiles: "ignore",
     etag: true,
-    extensions: ["html"],
+    extensions: ["html", "css", "js"],
     maxAge: "1m",
     redirect: true,
   })
 );
+
+// Authentication
+const requireAuth = (req, res, next) => {
+  if (req.session.authenticated) {
+    return next();
+  }
+  res.redirect("/fail");
+};
+
+app.get("/success", requireAuth, (req, res) => {
+  res.sendFile(path.join(import.meta.dirname, "frontend/success/success.html"));
+});
+
+// Test password
+app.post("/test", (req, res) => {
+  const pwd = process.env.PWD;
+  const input = req.body.pwd;
+  if (pwd !== input) {
+    return res.redirect("/fail");
+  }
+
+  req.session.authenticated = true;
+  return res.redirect("/success");
+});
 
 // GET /files -> return the file list
 const filePromises = new Set();
@@ -163,7 +201,7 @@ app.post("/filetransfer/text", express.text(), async (req, res) => {
   try {
     const content = req.body.trim();
     if (!content) return res.status(400).send("Empty text");
-    await fs.appendFile(path.join(STATIC_DIR, "text.log"), `${getDate()}\n${content}\n\n`);
+    await fs.appendFile(path.join(DIR, "text.log"), `${getDate()}\n${content}\n\n`);
     await log(`Received text: ${JSON.stringify(content)}`);
     console.log(`text received: ${content}`);
     res.send("text received");
@@ -191,7 +229,7 @@ app.post("/filetransfer/file", async (req, res) => {
 
     // write file with stream
     const writeStream = createWriteStream(
-      path.join(path.normalize("d:/code/filetransfer/files"), fileName)
+      path.join(path.join("d:/code/filetransfer/files"), fileName)
     );
     pipelineStream = pipeline(req, writeStream);
     filePromises.add(pipelineStream);
@@ -199,7 +237,7 @@ app.post("/filetransfer/file", async (req, res) => {
     res.send(`file ${fileName} received`);
     console.log(`file ${fileName} received`);
 
-    // send system notification and write into log
+    // Send system notification and write into log
     notifier.notify({
       title: "File received",
       message: `File ${fileName} received`,
@@ -251,20 +289,55 @@ app.get("/filetransfer/download", async (req, res) => {
 });
 
 // Start  server
-const PORT = process.env.PORT || 3000;
-const server = https.createServer(sslOptions, app);
-// const server = app;
+const PORT = Number.parseInt(process.env.PORT) || 3000;
+const ENV = process.env.ENV || "development";
+let server;
+if (ENV === "development") {
+  server = http.createServer(app);
+} else if (ENV === "production") {
+  server = https.createServer(sslOptions, app);
+} else {
+  console.log("invalid NODE_ENV, available: development, production");
+  process.exit(1);
+}
 const HOST = process.env.HOST || "0.0.0.0";
-server.listen(PORT, HOST, () => {
-  const result = [];
-  for (let net of Object.values(os.networkInterfaces()["WLAN"])) {
-    if (net.family === "IPv4" && !net.internal) {
-      result.push(net.address);
-    }
+
+async function tryPort(port) {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer();
+    server.listen(port, HOST);
+    server.on("listening", () => {
+      server.close();
+      resolve(port);
+    });
+    server.on("error", (err) => {
+      if (err.code === "EADDRINUSE") {
+        resolve(tryPort(port + 1));
+      } else {
+        reject(err);
+      }
+    });
+  });
+}
+
+const result = [];
+for (let net of Object.values(os.networkInterfaces()["WLAN"])) {
+  if (net.family === "IPv4" && !net.internal) {
+    result.push(net.address);
   }
-  console.log(
-    `Express server running at https://${HOST}:${PORT}, or visit at https://${result[0]}:${PORT}`
-  );
+}
+
+const availPort = await tryPort(PORT);
+server.listen(availPort, HOST, () => {
+  if (ENV === "development") {
+    console.log(
+      `server running at http://${HOST}:${availPort}, NODE_ENV: development, visit at http://${result[0]}:${availPort}`
+    );
+  } else {
+    console.log(
+      `server running at https://${HOST}:${availPort}, NODE_ENV: production, visit at https://${result[0]}:${availPort}`
+    );
+  }
 });
 
 // shut down
