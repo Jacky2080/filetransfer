@@ -5,7 +5,8 @@ import fs from "fs/promises";
 import { createReadStream, createWriteStream } from "fs";
 import path from "path";
 import express from "express";
-import session from "express-session";
+import jwt from "jsonwebtoken";
+import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import notifier from "node-notifier";
 import { pipeline } from "stream/promises";
@@ -102,6 +103,7 @@ app.use(helmet());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.text());
+app.use(cookieParser());
 
 // CORS & Preflight
 app.use((req, res, next) => {
@@ -116,18 +118,6 @@ app.use((req, res, next) => {
   }
   next();
 });
-
-app.use(
-  session({
-    secret: process.env.SESSION_KEY,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: false,
-      maxAge: null,
-    },
-  })
-);
 
 // Serve static files
 app.use(
@@ -153,16 +143,20 @@ app.use(
 );
 
 // Authentication
-const requireAuth = (req, res, next) => {
-  if (req.session.authenticated) {
-    return next();
-  }
-  res.redirect("/fail");
-};
+function generateToken(payload) {
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "3h" });
+}
 
-app.get("/success", requireAuth, (req, res) => {
-  res.sendFile(path.join(import.meta.dirname, "frontend/success/success.html"));
-});
+function requireAuth(req, res, next) {
+  const token = req.cookies.token;
+  if (!token) return res.redirect("/fail");
+  try {
+    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    return next();
+  } catch {
+    return res.redirect("/fail");
+  }
+}
 
 // Test password
 app.post("/test", (req, res) => {
@@ -172,8 +166,19 @@ app.post("/test", (req, res) => {
     return res.redirect("/fail");
   }
 
-  req.session.authenticated = true;
+  const token = generateToken({ user: "authenticated" });
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: false,
+    sameSite: "strict",
+    maxAge: null,
+  });
+
   return res.redirect("/success");
+});
+
+app.get("/success", requireAuth, (req, res) => {
+  res.sendFile(path.join(import.meta.dirname, "frontend/success/success.html"));
 });
 
 // GET /files -> return the file list
