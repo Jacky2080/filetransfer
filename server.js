@@ -11,6 +11,7 @@ import helmet from "helmet";
 import notifier from "node-notifier";
 import { pipeline } from "stream/promises";
 import os from "os";
+import archiver from "archiver";
 import { config } from "dotenv";
 config();
 
@@ -46,7 +47,7 @@ async function ensureDir(dirPath) {
     await fs.access(dirPath);
   } catch {
     await fs.mkdir(dirPath, { recursive: true });
-    await log(`Directory ${dirPath} did not exist, created.`);
+    await log(`Directory "${dirPath}" did not exist, created.`);
   }
 }
 
@@ -99,7 +100,7 @@ const sslOptions = {
 
 // Express setup
 const app = express();
-app.use(helmet());
+// app.use(helmet());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.text());
@@ -182,18 +183,20 @@ app.get("/success", requireAuth, (req, res) => {
 });
 
 // GET /files -> return the file list
-const filePromises = new Set();
 app.get("/files", async (req, res) => {
   try {
-    if (filePromises.size > 0) {
-      await Promise.all(filePromises);
-    }
-
+    const date = req.query.date;
     await ensureDir(FILE_DIR);
-    const fileNames = await fs.readdir(FILE_DIR);
+    let fileNames;
+    try {
+      await fs.access(path.join(FILE_DIR, date));
+      fileNames = await fs.readdir(path.join(FILE_DIR, date));
+    } catch {
+      fileNames = [];
+    }
     const fileList = fileNames.map((name, idx) => ({ index: idx, name }));
     res.json(fileList);
-    await log(`Sent file list, ${fileList.length} file(s) found.`);
+    await log(`Sent file list date ${date}, ${fileList.length} file(s) found.`);
   } catch (e) {
     console.log(e);
     res.status(500).json({ error: "Failed to read files" });
@@ -201,8 +204,8 @@ app.get("/files", async (req, res) => {
   }
 });
 
-// POST /filetransfer/text -> receive text
-app.post("/filetransfer/text", express.text(), async (req, res) => {
+// POST /text -> receive text
+app.post("/text", requireAuth, express.text({ limit: "1mb" }), async (req, res) => {
   try {
     const content = req.body.trim();
     if (!content) return res.status(400).send("Empty text");
@@ -217,15 +220,19 @@ app.post("/filetransfer/text", express.text(), async (req, res) => {
   }
 });
 
-// POST /filetransfer/file -> receive file
-app.post("/filetransfer/file", async (req, res) => {
+// POST /file -> receive file
+app.post("/file", requireAuth, async (req, res) => {
+  const today = new Date().toLocaleDateString().replaceAll("/", "-");
   let fileName = "";
-  let pipelineStream;
   try {
     await ensureDir(FILE_DIR);
+    await ensureDir(path.join(FILE_DIR, today));
     console.log("receiving file");
     await log(`Start receiving file`);
-    fileName = decodeURIComponent(req.headers["x-filename"]);
+    fileName = decodeURIComponent(req.headers["x-filename"]).replace(/[\/\\?%*:|"<>]/g, "_");
+    if (fileName.includes("..")) {
+      fileName = fileName.replace(/\.\./g, "");
+    }
 
     // handle repeated file names
     const fileExt = path.extname(fileName);
@@ -233,12 +240,8 @@ app.post("/filetransfer/file", async (req, res) => {
     fileName = await getUniqueFileName(FILE_DIR, baseName, fileExt);
 
     // write file with stream
-    const writeStream = createWriteStream(
-      path.join(path.join("d:/code/filetransfer/files"), fileName)
-    );
-    pipelineStream = pipeline(req, writeStream);
-    filePromises.add(pipelineStream);
-    await pipelineStream;
+    const writeStream = createWriteStream(path.join(FILE_DIR, today, fileName));
+    await pipeline(req, writeStream);
     res.send(`file ${fileName} received`);
     console.log(`file ${fileName} received`);
 
@@ -256,32 +259,72 @@ app.post("/filetransfer/file", async (req, res) => {
     console.log(e);
     res.status(500).send("Failed to receive file");
     await log(`[error] Failed to receive file: ${e}`);
-  } finally {
-    filePromises.delete(pipelineStream);
   }
 });
 
-// GET /filetransfer/download?id= -> send file to download
-app.get("/filetransfer/download", async (req, res) => {
+// GET /download?id= -> send file to download
+app.get("/download", requireAuth, async (req, res) => {
   try {
-    const id = req.query.id;
-    const files = await fs.readdir(FILE_DIR);
-    if (isNaN(id) || id < 0 || id >= files.length) return res.status(400).send("Invalid file id");
+    const date = req.query.date;
+    const names = req.query.names;
+    // Verify date and names format
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).send("Invalid date format.");
+    for (const name of names) {
+      if (name.includes("..") || path.isAbsolute(name))
+        return res.status(400).send("Invalid file name detected.");
+    }
+    const fileNames = names.split(",");
 
-    const fileName = files[id];
-    const filePath = path.join(FILE_DIR, fileName);
-    const stats = await fs.stat(filePath);
+    if (fileNames.length === 1)
+      return res.download(path.join(FILE_DIR, date, fileNames[0]), async (err) => {
+        if (err) {
+          console.log(err);
+          await log(`[error] Failed to send file: ${err}`);
+          if (!res.headersSent) {
+            res.status(500).send("Failed to send download file");
+          }
+        } else {
+          await log(`Sent file "${date}/${fileNames[0]}" for download`);
+        }
+      });
 
-    await log(`Start sending file "${fileName}" to download`);
-    res.writeHead(200, {
-      "Content-Type": "application/octet-stream",
-      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`,
-      "Content-Length": stats.size,
+    const zipName = `files_${date}.zip`;
+    const archive = archiver("zip");
+
+    res.attachment(zipName);
+    res.setHeader("Content-Type", "application/zip");
+    archive.pipe(res);
+
+    let filesAdded = 0;
+    for (const name of fileNames) {
+      const filePath = path.join(FILE_DIR, date, name);
+      try {
+        await fs.access(filePath);
+        archive.file(filePath, { name: name });
+        filesAdded++;
+      } catch (e) {
+        console.log(`Error when adding ${filePath} to archive: `, e);
+        await log(`[error] File not found for zip: "${date}/${name}"`);
+      }
+    }
+
+    archive.on("error", async (err) => {
+      console.error("Archiver error:", err);
+      await log(`[error] Archiver error: ${err}`);
+      if (!res.headersSent) {
+        res.status(500).send({ error: err.message });
+      } else {
+        res.end();
+      }
     });
 
-    const readStream = createReadStream(filePath);
-    await pipeline(readStream, res);
-    await log(`Sent file "${fileName}" for download`);
+    archive.on("finish", async () => {
+      console.log(`Zip archive sent: ${zipName}, files added: ${filesAdded}`);
+      await log(`Sent zip archive "${zipName}" with ${filesAdded} file(s) for download`);
+    });
+
+    archive.finalize();
+    return;
   } catch (e) {
     console.log(e);
     await log(`[error] Failed to send file: ${e}`);
@@ -291,6 +334,65 @@ app.get("/filetransfer/download", async (req, res) => {
       res.end();
     }
   }
+});
+
+// Clean old files
+const expireDay = Number.parseInt(process.env.EXPIREDAY) || 7;
+async function cleanOldFiles() {
+  console.log("Starting cleanup of old files...");
+  await log("[info] Start cleaning old files");
+
+  const dayBorder = new Date();
+  dayBorder.setDate(dayBorder.getDate() - expireDay);
+
+  try {
+    await ensureDir(FILE_DIR);
+    const dirs = await fs.readdir(FILE_DIR, { withFileTypes: true });
+    if (dirs.length === 0) return;
+
+    for (const dir of dirs) {
+      if (!dir.isDirectory()) continue;
+      const dirPath = path.join(FILE_DIR, dir.name);
+      const dirDate = new Date(dir.name);
+      if (isNaN(dirDate) || dirDate > dayBorder) continue;
+
+      try {
+        const filesInDir = await fs.readdir(dirPath);
+
+        for (const file of filesInDir) {
+          const filePath = path.join(dirPath, file);
+          await fs.unlink(filePath);
+        }
+      } catch (e) {
+        console.error(`Error deleting files in ${dirPath}:`, e);
+        await log(`[error] Error deleting files in ${dirPath}: ${e}`);
+        continue;
+      }
+      try {
+        await fs.rmdir(dirPath);
+        await log(`Deleted old directory: ${dirPath}`);
+      } catch (e) {
+        console.error(`Error deleting directory ${dirPath}:`, e);
+        await log(`[error] Error deleting directory ${dirPath}: ${e}`);
+      }
+    }
+
+    console.log("Cleaning finished.");
+    await log("Cleaning finished.");
+  } catch (e) {
+    console.log("Failed to clean old directories:", e);
+    await log(`[error] Failed to clean old directories: ${e}`);
+  }
+}
+
+// Handle express error
+app.use(async (err, req, res, next) => {
+  await log(
+    `[error] Path: ${req.originalUrl}, Method: ${req.method}, Error: ${err.stack || err.message}`
+  );
+  console.error(err.stack || err.message);
+  const statusCode = err.status || 500;
+  return res.status(statusCode).send("An unexpected error occurred.");
 });
 
 // Start  server
@@ -332,6 +434,7 @@ for (let net of Object.values(os.networkInterfaces()["WLAN"])) {
   }
 }
 
+let cleanupInterval;
 const availPort = await tryPort(PORT);
 server.listen(availPort, HOST, () => {
   if (ENV === "development") {
@@ -343,11 +446,15 @@ server.listen(availPort, HOST, () => {
       `server running at https://${HOST}:${availPort}, NODE_ENV: production, visit at https://${result[0]}:${availPort}`
     );
   }
+
+  cleanOldFiles();
+  cleanupInterval = setInterval(cleanOldFiles, 24 * 60 * 60 * 1000);
 });
 
 // shut down
 process.on("SIGINT", () => {
   console.log("Received SIGINT. Closing server...");
+  if (cleanupInterval) clearInterval(cleanupInterval);
   server.close(() => {
     console.log("Sercer closed");
     process.exit(0);
@@ -355,6 +462,7 @@ process.on("SIGINT", () => {
 });
 process.on("SIGTERM", () => {
   console.log("Received SIGTERM. Closing server...");
+  if (cleanupInterval) clearInterval(cleanupInterval);
   server.close(() => {
     console.log("Sercer closed");
     process.exit(0);

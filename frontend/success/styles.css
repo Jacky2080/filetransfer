@@ -1,4 +1,5 @@
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
 }
@@ -51,7 +52,13 @@ button {
 }
 
 h3 {
-  margin: 0 0 10px 20px;
+  margin: 10px 10px 5px 20px;
+  display: inline-block;
+}
+
+#date {
+  display: inline-block;
+  vertical-align: middle;
 }
 
 #files {
