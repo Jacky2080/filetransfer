@@ -161,7 +161,7 @@ function requireAuth(req, res, next) {
 
 // Test password
 app.post("/test", (req, res) => {
-  const pwd = process.env.PWD;
+  const pwd = process.env.PASSWORD;
   const input = req.body.pwd;
   if (pwd !== input) {
     return res.redirect("/fail");
@@ -222,10 +222,9 @@ app.post("/text", requireAuth, express.text({ limit: "1mb" }), async (req, res) 
 
 // POST /file -> receive file
 app.post("/file", requireAuth, async (req, res) => {
-  const today = new Date().toLocaleDateString().replaceAll("/", "-");
+  const today = new Date().toLocaleDateString("zh-CN").replaceAll("/", "-");
   let fileName = "";
   try {
-    await ensureDir(FILE_DIR);
     await ensureDir(path.join(FILE_DIR, today));
     console.log("receiving file");
     await log(`Start receiving file`);
@@ -234,26 +233,26 @@ app.post("/file", requireAuth, async (req, res) => {
       fileName = fileName.replace(/\.\./g, "");
     }
 
-    // handle repeated file names
+    // Handle repeated file names
     const fileExt = path.extname(fileName);
     const baseName = path.basename(fileName, fileExt);
     fileName = await getUniqueFileName(FILE_DIR, baseName, fileExt);
 
-    // write file with stream
+    // Write file with stream
     const writeStream = createWriteStream(path.join(FILE_DIR, today, fileName));
     await pipeline(req, writeStream);
     res.send(`file ${fileName} received`);
     console.log(`file ${fileName} received`);
 
     // Send system notification and write into log
-    notifier.notify({
-      title: "File received",
-      message: `File ${fileName} received`,
-      appID: "com.node.filetransfer",
-      timeout: 1,
-      icon: null,
-      sound: false,
-    });
+    // notifier.notify({
+    //   title: "File received",
+    //   message: `File ${fileName} received`,
+    //   appID: "com.node.filetransfer",
+    //   timeout: 1,
+    //   icon: null,
+    //   sound: false,
+    // });
     await log(`Received file "${fileName}"`);
   } catch (e) {
     console.log(e);
@@ -357,20 +356,9 @@ async function cleanOldFiles() {
       if (isNaN(dirDate) || dirDate > dayBorder) continue;
 
       try {
-        const filesInDir = await fs.readdir(dirPath);
-
-        for (const file of filesInDir) {
-          const filePath = path.join(dirPath, file);
-          await fs.unlink(filePath);
-        }
-      } catch (e) {
-        console.error(`Error deleting files in ${dirPath}:`, e);
-        await log(`[error] Error deleting files in ${dirPath}: ${e}`);
-        continue;
-      }
-      try {
-        await fs.rmdir(dirPath);
-        await log(`Deleted old directory: ${dirPath}`);
+        await fs.rm(dirPath, { recursive: true });
+        await log(`Deleted old directory "${dirPath}"`);
+        console.log(`Deleted old directory "${dirPath}"`);
       } catch (e) {
         console.error(`Error deleting directory ${dirPath}:`, e);
         await log(`[error] Error deleting directory ${dirPath}: ${e}`);
@@ -451,12 +439,12 @@ server.listen(availPort, HOST, () => {
   cleanupInterval = setInterval(cleanOldFiles, 24 * 60 * 60 * 1000);
 });
 
-// shut down
+// Shut down
 process.on("SIGINT", () => {
   console.log("Received SIGINT. Closing server...");
   if (cleanupInterval) clearInterval(cleanupInterval);
   server.close(() => {
-    console.log("Sercer closed");
+    console.log("Server closed");
     process.exit(0);
   });
 });
@@ -464,7 +452,7 @@ process.on("SIGTERM", () => {
   console.log("Received SIGTERM. Closing server...");
   if (cleanupInterval) clearInterval(cleanupInterval);
   server.close(() => {
-    console.log("Sercer closed");
+    console.log("Server closed");
     process.exit(0);
   });
 });

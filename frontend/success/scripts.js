@@ -1,35 +1,46 @@
 const file = document.getElementById("file");
-const text = document.getElementById("text");
-const textBtn = document.getElementById("textBtn");
+const dropArea = document.getElementById("drop-area");
 const fileBtn = document.getElementById("fileBtn");
 const fetchBtn = document.getElementById("fetchBtn");
 const date = document.getElementById("date");
 
-const today = new Date().toISOString().split("T")[0];
+const today = new Date().toLocaleDateString("zh-CN").replaceAll("/", "-");
 date.value = today;
 
-// post text to the back-end
-async function postText(t) {
-  if (t === "") {
-    text.value = "";
+// prevent default for drag
+["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+  dropArea.addEventListener(eventName, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+});
+
+// hightlight and unhighlight when dragging
+["dragenter", "dragover"].forEach((eventName) => {
+  dropArea.addEventListener(eventName, () => dropArea.classList.add("highlight"));
+});
+["dragleave", "drop"].forEach((eventName) => {
+  dropArea.addEventListener(eventName, () => dropArea.classList.remove("highlight"), false);
+});
+
+// handle drop
+dropArea.addEventListener("drop", (e) => {
+  const dt = e.dataTransfer;
+  let files = dt.files;
+  files = Array.from(files).filter((file) => {
+    if (file.name.toLowerCase().endsWith(".url")) return false;
+    return true;
+  });
+
+  if (files.length === 0) {
+    dropArea.innerHTML = "No files detected";
+    setTimeout(() => {
+      dropArea.innerHTML = "Drag & Drop files here";
+    }, 1500);
     return;
   }
-  try {
-    const res = await fetch("/text", {
-      method: "POST",
-      headers: { "Content-Type": "text/plain" },
-      body: t,
-    });
-    console.log(await res.text());
-    text.value = "";
-    textBtn.innerHTML = "Text Sent!";
-    setTimeout(() => {
-      textBtn.innerHTML = "Send";
-    }, 1500);
-  } catch (e) {
-    alert(e);
-  }
-}
+  files.map((f, i) => postFile(f, i));
+});
 
 // post one file at a time
 async function postFile(f, i) {
@@ -54,11 +65,6 @@ async function postFile(f, i) {
     alert(error.message);
   }
 }
-
-// post text on click
-textBtn.addEventListener("click", () => {
-  postText(text.value.trim());
-});
 
 // post file on click
 fileBtn.addEventListener("click", async () => {
