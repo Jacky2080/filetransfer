@@ -4,7 +4,7 @@
   "description": "a simple file transfer webpage in local network",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --watch server.js",
     "start": "node server.js"
   },
   "bin": {
@@ -28,6 +28,7 @@
     "express": "^5.1.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.1",
     "node-notifier": "^10.0.1"
   }
 }

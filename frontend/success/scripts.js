@@ -4,7 +4,9 @@ const fileBtn = document.getElementById("fileBtn");
 const fetchBtn = document.getElementById("fetchBtn");
 const date = document.getElementById("date");
 
-const today = new Date().toLocaleDateString("zh-CN").replaceAll("/", "-");
+const now = new Date();
+const pad = (n) => n.toString().padStart(2, "0");
+const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 date.value = today;
 
 // prevent default for drag
@@ -24,7 +26,7 @@ date.value = today;
 });
 
 // handle drop
-dropArea.addEventListener("drop", (e) => {
+dropArea.addEventListener("drop", async (e) => {
   const dt = e.dataTransfer;
   let files = dt.files;
   files = Array.from(files).filter((file) => {
@@ -39,7 +41,29 @@ dropArea.addEventListener("drop", (e) => {
     }, 1500);
     return;
   }
-  files.map((f, i) => postFile(f, i));
+
+  dropArea.innerHTML = "Uploading...";
+  const results = await Promise.all(
+    files.map((f, i) =>
+      postFile(f, i)
+        .then(() => ({ ok: true, name: f.name }))
+        .catch((err) => ({ ok: false, name: f.name, error: err.message }))
+    )
+  );
+  const failed = results.filter((r) => !r.ok);
+  if (failed.length > 0) {
+    dropArea.innerHTML =
+      `${failed.length} file(s) failed:<br>` +
+      failed.map((r) => `<div>${r.name}: ${r.error}</div>`).join("");
+  } else {
+    dropArea.innerHTML = `${files.length} file${files.length > 1 ? "s" : ""} sent`;
+  }
+  if (date.value === today) fetchFiles(today);
+
+  setTimeout(() => {
+    dropArea.innerHTML = "Drag & Drop files here";
+  }, 1500);
+  console.log("All files uploaded", results);
 });
 
 // post one file at a time
@@ -69,28 +93,21 @@ async function postFile(f, i) {
 // post file on click
 fileBtn.addEventListener("click", async () => {
   if (file.files.length === 0) return;
-  Array.from(file.files).map((f, i) => postFile(f, i));
-  if (date.value === today)
-    fetchFiles(
-      today,
-      true,
-      Array.from(file.files).map((f) => f.name)
-    );
+  try {
+    await Promise.all(Array.from(file.files).map((f, i) => postFile(f, i)));
+    if (date.value === today) fetchFiles(today);
+  } catch (e) {
+    console.error(`error when uploading file: ${e}`);
+  }
 });
 
 // get the file list
-async function fetchFiles(date, afterPost = false, fileNames = []) {
+async function fetchFiles(date) {
   console.log("start fetching file list");
   let files = await fetch(`/files?date=${date}`, { method: "GET" });
   files = await files.json();
   const filesDiv = document.getElementById("files");
   filesDiv.innerHTML = "";
-
-  if (afterPost) {
-    const fileSet = new Set(files);
-    for (const f of fileNames) fileSet.add({ name: f, index: fileSet.size });
-    files = Array.from(fileSet);
-  }
 
   // add html elements
   for (const f of files) {

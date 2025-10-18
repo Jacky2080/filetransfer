@@ -2,7 +2,7 @@
 import https from "https";
 import http from "http";
 import fs from "fs/promises";
-import { createReadStream, createWriteStream } from "fs";
+import { createWriteStream } from "fs";
 import path from "path";
 import express from "express";
 import jwt from "jsonwebtoken";
@@ -12,12 +12,14 @@ import notifier from "node-notifier";
 import { pipeline } from "stream/promises";
 import os from "os";
 import archiver from "archiver";
+import morgan from "morgan";
 import { config } from "dotenv";
 config();
 
 const DIR = import.meta.dirname;
 const LOG_FILE = path.join(DIR, "server.log");
 const FILE_DIR = path.join(DIR, "files/");
+const TRAFFIC_LOG_FILE = path.join(DIR, "traffic.log");
 
 // Return the formatted present date
 function getDate() {
@@ -106,6 +108,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.text());
 app.use(cookieParser());
 
+const accessLogStream = createWriteStream(TRAFFIC_LOG_FILE, { flags: "a" });
+app.use(morgan("combined", { stream: accessLogStream }));
+
 // CORS & Preflight
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
@@ -137,7 +142,7 @@ app.use(
   express.static(path.join(DIR, "frontend"), {
     dotfiles: "ignore",
     etag: true,
-    extensions: ["html", "css", "js"],
+    extensions: ["html"],
     maxAge: "1m",
     redirect: true,
   })
@@ -150,12 +155,12 @@ function generateToken(payload) {
 
 function requireAuth(req, res, next) {
   const token = req.cookies.token;
-  if (!token) return res.redirect("/fail");
+  if (!token) return res.status(401).redirect("/fail/");
   try {
     req.user = jwt.verify(token, process.env.JWT_SECRET);
     return next();
   } catch {
-    return res.redirect("/fail");
+    return res.status(401).redirect("/fail/");
   }
 }
 
@@ -164,7 +169,7 @@ app.post("/test", (req, res) => {
   const pwd = process.env.PASSWORD;
   const input = req.body.pwd;
   if (pwd !== input) {
-    return res.redirect("/fail");
+    return res.redirect("/fail/");
   }
 
   const token = generateToken({ user: "authenticated" });
@@ -172,10 +177,10 @@ app.post("/test", (req, res) => {
     httpOnly: true,
     secure: false,
     sameSite: "strict",
-    maxAge: null,
+    maxAge: 24 * 60 * 60 * 1000,
   });
 
-  return res.redirect("/success");
+  return res.redirect("/success/");
 });
 
 app.get("/success", requireAuth, (req, res) => {
@@ -183,7 +188,7 @@ app.get("/success", requireAuth, (req, res) => {
 });
 
 // GET /files -> return the file list
-app.get("/files", async (req, res) => {
+app.get("/files", requireAuth, async (req, res) => {
   try {
     const date = req.query.date;
     await ensureDir(FILE_DIR);
@@ -236,7 +241,7 @@ app.post("/file", requireAuth, async (req, res) => {
     // Handle repeated file names
     const fileExt = path.extname(fileName);
     const baseName = path.basename(fileName, fileExt);
-    fileName = await getUniqueFileName(FILE_DIR, baseName, fileExt);
+    fileName = await getUniqueFileName(path.join(FILE_DIR, today), baseName, fileExt);
 
     // Write file with stream
     const writeStream = createWriteStream(path.join(FILE_DIR, today, fileName));
