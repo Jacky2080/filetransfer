@@ -102,7 +102,14 @@ const sslOptions = {
 
 // Express setup
 const app = express();
-// app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    strictTransportSecurity: false,
+    crossOriginOpenerPolicy: false,
+    originAgentCluster: false,
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.text());
@@ -111,18 +118,30 @@ app.use(cookieParser());
 const accessLogStream = createWriteStream(TRAFFIC_LOG_FILE, { flags: "a" });
 app.use(morgan("combined", { stream: accessLogStream }));
 
-// CORS & Preflight
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, HEAD, POST");
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Filename, X-Filesize, X-Filetype"
-  );
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
   next();
+});
+
+function checkAuthRedirect(req, res, next) {
+  const token = req.cookies.token;
+
+  if (token) {
+    try {
+      jwt.verify(token, process.env.JWT_SECRET);
+      return res.redirect("/success/");
+    } catch {
+      console.log("Encounter an expired/Invalid JWT in home page check.");
+    }
+  }
+
+  next();
+}
+
+app.get("/", checkAuthRedirect, (req, res) => {
+  res.sendFile(path.join(DIR, "frontend/index.html"));
 });
 
 // Serve static files
@@ -133,7 +152,7 @@ app.use(
     etag: true,
     extensions: ["html"],
     index: "fail.html",
-    maxAge: "1h",
+    maxAge: 30 * 24 * 60 * 60 * 1000,
     redirect: true,
   })
 );
@@ -143,7 +162,7 @@ app.use(
     dotfiles: "ignore",
     etag: true,
     extensions: ["html"],
-    maxAge: "1m",
+    maxAge: 30 * 24 * 60 * 60 * 1000,
     redirect: true,
   })
 );
@@ -270,65 +289,78 @@ app.post("/file", requireAuth, async (req, res) => {
 app.get("/download", requireAuth, async (req, res) => {
   try {
     const date = req.query.date;
-    const names = req.query.names;
+    const namesString = req.query.names;
+
     // Verify date and names format
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).send("Invalid date format.");
-    for (const name of names) {
-      if (name.includes("..") || path.isAbsolute(name))
+
+    if (!namesString || namesString.length === 0) {
+      return res.status(400).send("No file names provided.");
+    }
+    const fileNames = namesString.split(",").filter((n) => n.trim().length > 0);
+    for (const name of fileNames) {
+      if (name.includes("..") || path.isAbsolute(name) || name.includes(path.sep))
         return res.status(400).send("Invalid file name detected.");
     }
-    const fileNames = names.split(",");
 
-    if (fileNames.length === 1)
-      return res.download(path.join(FILE_DIR, date, fileNames[0]), async (err) => {
+    const dateDir = path.join(FILE_DIR, date);
+
+    if (fileNames.length === 1) {
+      const finalFileName = path.basename(fileNames[0]);
+      const filePath = path.join(dateDir, finalFileName);
+      return res.download(filePath, async (err) => {
         if (err) {
           console.log(err);
-          await log(`[error] Failed to send file: ${err}`);
+          await log(`[error] Failed to send single file: ${err}`);
           if (!res.headersSent) {
             res.status(500).send("Failed to send download file");
           }
         } else {
-          await log(`Sent file "${date}/${fileNames[0]}" for download`);
+          await log(`Sent file "${date}/${finalFileName}" for download`);
+        }
+      });
+    } else if (fileNames.length > 1) {
+      const zipName = `files_${date}.zip`;
+      res.attachment(zipName);
+      const archive = archiver("zip");
+
+      archive.on("error", async (err) => {
+        console.error("Archiver error:", err);
+        await log(`[error] Failed to create archive: ${err}`);
+        if (!res.headersSent) {
+          res.status(500).send("Failed to create archive.");
+        } else {
+          res.end();
         }
       });
 
-    const zipName = `files_${date}.zip`;
-    const archive = archiver("zip");
+      res.setHeader("Content-Type", "application/zip");
+      archive.pipe(res);
 
-    res.attachment(zipName);
-    res.setHeader("Content-Type", "application/zip");
-    archive.pipe(res);
-
-    let filesAdded = 0;
-    for (const name of fileNames) {
-      const filePath = path.join(FILE_DIR, date, name);
-      try {
-        await fs.access(filePath);
-        archive.file(filePath, { name: name });
-        filesAdded++;
-      } catch (e) {
-        console.log(`Error when adding ${filePath} to archive: `, e);
-        await log(`[error] File not found for zip: "${date}/${name}"`);
+      let filesAdded = 0;
+      for (const name of fileNames) {
+        const filePath = path.join(dateDir, name);
+        try {
+          await fs.access(filePath);
+          archive.file(filePath, { name: name });
+          filesAdded++;
+        } catch (e) {
+          console.log(`Error when adding ${filePath} to archive: `, e);
+          await log(`[error] File not found for zip: "${date}/${name}"`);
+        }
       }
+
+      archive.on("finish", async () => {
+        console.log(`Zip archive sent: ${zipName}, files added: ${filesAdded}`);
+        await log(`Sent zip archive "${zipName}" with ${filesAdded} file(s) for download`);
+      });
+
+      archive.finalize();
+      return;
+    } else {
+      // fileNames.length === 0
+      return res.status(400).send("No files selected for download.");
     }
-
-    archive.on("error", async (err) => {
-      console.error("Archiver error:", err);
-      await log(`[error] Archiver error: ${err}`);
-      if (!res.headersSent) {
-        res.status(500).send({ error: err.message });
-      } else {
-        res.end();
-      }
-    });
-
-    archive.on("finish", async () => {
-      console.log(`Zip archive sent: ${zipName}, files added: ${filesAdded}`);
-      await log(`Sent zip archive "${zipName}" with ${filesAdded} file(s) for download`);
-    });
-
-    archive.finalize();
-    return;
   } catch (e) {
     console.log(e);
     await log(`[error] Failed to send file: ${e}`);
