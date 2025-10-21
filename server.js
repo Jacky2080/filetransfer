@@ -114,6 +114,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.text());
 app.use(cookieParser());
+app.set("trust proxy", true);
 
 const accessLogStream = createWriteStream(TRAFFIC_LOG_FILE, { flags: "a" });
 app.use(morgan("combined", { stream: accessLogStream }));
@@ -125,14 +126,16 @@ app.use((req, res, next) => {
   next();
 });
 
-function checkAuthRedirect(req, res, next) {
+async function checkAuthRedirect(req, res, next) {
   const token = req.cookies.token;
 
   if (token) {
     try {
       jwt.verify(token, process.env.JWT_SECRET);
+      await log(`[info] Valid JWT detected from ${req.ip}, redirecting to /success`);
       return res.redirect("/success/");
     } catch {
+      await log(`[warn] Invalid or expired JWT from ${req.ip}, clearing cookie`);
       console.log("Encounter an expired/Invalid JWT in home page check.");
     }
   }
@@ -169,7 +172,7 @@ app.use(
 
 // Authentication
 function generateToken(payload) {
-  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "3h" });
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "3d" });
 }
 
 function requireAuth(req, res, next) {
@@ -184,19 +187,21 @@ function requireAuth(req, res, next) {
 }
 
 // Test password
-app.post("/test", (req, res) => {
+app.post("/test", async (req, res) => {
   const pwd = process.env.PASSWORD;
   const input = req.body.pwd;
   if (pwd !== input) {
+    await log(`[warn] Failed login attempt from ${req.ip}`);
     return res.redirect("/fail/");
   }
+  await log(`[info] Successful login from ${req.ip}`);
 
   const token = generateToken({ user: "authenticated" });
   res.cookie("token", token, {
     httpOnly: true,
     secure: false,
     sameSite: "strict",
-    maxAge: 24 * 60 * 60 * 1000,
+    maxAge: 3 * 24 * 60 * 60 * 1000,
   });
 
   return res.redirect("/success/");
@@ -251,7 +256,7 @@ app.post("/file", requireAuth, async (req, res) => {
   try {
     await ensureDir(path.join(FILE_DIR, today));
     console.log("receiving file");
-    await log(`Start receiving file`);
+    await log(`[info] Start receiving file from ${req.ip}`);
     fileName = decodeURIComponent(req.headers["x-filename"]).replace(/[\/\\?%*:|"<>]/g, "_");
     if (fileName.includes("..")) {
       fileName = fileName.replace(/\.\./g, "");
@@ -277,7 +282,12 @@ app.post("/file", requireAuth, async (req, res) => {
     //   icon: null,
     //   sound: false,
     // });
-    await log(`Received file "${fileName}"`);
+    const duration = Date.now() - start;
+    await log(
+      `[info] File "${fileName}" received successfully from ${req.ip}, size=${
+        req.headers["content-length"] || "unknown"
+      } bytes, duration=${duration}ms`
+    );
   } catch (e) {
     console.log(e);
     res.status(500).send("Failed to receive file");
@@ -316,7 +326,7 @@ app.get("/download", requireAuth, async (req, res) => {
             res.status(500).send("Failed to send download file");
           }
         } else {
-          await log(`Sent file "${date}/${finalFileName}" for download`);
+          await log(`Sent file "${date}/${finalFileName}" to IP ${req.ip} for download`);
         }
       });
     } else if (fileNames.length > 1) {
@@ -352,7 +362,11 @@ app.get("/download", requireAuth, async (req, res) => {
 
       archive.on("finish", async () => {
         console.log(`Zip archive sent: ${zipName}, files added: ${filesAdded}`);
-        await log(`Sent zip archive "${zipName}" with ${filesAdded} file(s) for download`);
+        await log(
+          `[info] Sent zip archive "${zipName}" with files ${fileNames
+            .map((n) => `"${n}"`)
+            .join(", ")} on date ${date} to IP ${req.ip} for download`
+        );
       });
 
       archive.finalize();
@@ -376,7 +390,7 @@ app.get("/download", requireAuth, async (req, res) => {
 const expireDay = Number.parseInt(process.env.EXPIREDAY) || 7;
 async function cleanOldFiles() {
   console.log("Starting cleanup of old files...");
-  await log("[info] Start cleaning old files");
+  await log(`[info] Cleaning old files older than ${expireDay} days started`);
 
   const dayBorder = new Date();
   dayBorder.setDate(dayBorder.getDate() - expireDay);
@@ -403,7 +417,7 @@ async function cleanOldFiles() {
     }
 
     console.log("Cleaning finished.");
-    await log("Cleaning finished.");
+    await log(`[info] Cleaning old files finished`);
   } catch (e) {
     console.log("Failed to clean old directories:", e);
     await log(`[error] Failed to clean old directories: ${e}`);
@@ -444,8 +458,10 @@ async function tryPort(port) {
     });
     server.on("error", (err) => {
       if (err.code === "EADDRINUSE") {
+        log(`[warn] Port ${port} is in use, trying ${port + 1}`);
         resolve(tryPort(port + 1));
       } else {
+        log(`[error] Port checking failed: ${err.message}`);
         reject(err);
       }
     });
@@ -461,7 +477,8 @@ for (let net of Object.values(os.networkInterfaces()["WLAN"])) {
 
 let cleanupInterval;
 const availPort = await tryPort(PORT);
-server.listen(availPort, HOST, () => {
+await log(`[info] Server starting on ${HOST}:${availPort}, mode=${ENV}`);
+server.listen(availPort, HOST, async () => {
   if (ENV === "development") {
     console.log(
       `server running at http://${HOST}:${availPort}, NODE_ENV: development, visit at http://${result[0]}:${availPort}`
@@ -471,6 +488,11 @@ server.listen(availPort, HOST, () => {
       `server running at https://${HOST}:${availPort}, NODE_ENV: production, visit at https://${result[0]}:${availPort}`
     );
   }
+  await log(
+    `[info] Server started successfully at ${
+      ENV === "production" ? "https" : "http"
+    }://${HOST}:${availPort}`
+  );
 
   cleanOldFiles();
   cleanupInterval = setInterval(cleanOldFiles, 24 * 60 * 60 * 1000);
