@@ -37,7 +37,7 @@ function getDate() {
  * @param {string} message
  */
 async function log(message) {
-  await fs.appendFile(LOG_FILE, `${getDate()} ${message}\n`);
+  await fs.appendFile(LOG_FILE, `${getDate()} ${message}\n`, "utf8");
 }
 
 /**
@@ -238,7 +238,7 @@ app.post("/text", requireAuth, express.text({ limit: "1mb" }), async (req, res) 
   try {
     const content = req.body.trim();
     if (!content) return res.status(400).send("Empty text");
-    await fs.appendFile(path.join(DIR, "text.log"), `${getDate()}\n${content}\n\n`);
+    await fs.appendFile(path.join(DIR, "text.log"), `${getDate()}\n${content}\n\n`, "utf8");
     await log(`Received text: ${JSON.stringify(content)}`);
     console.log(`text received: ${content}`);
     res.send("text received");
@@ -252,6 +252,7 @@ app.post("/text", requireAuth, express.text({ limit: "1mb" }), async (req, res) 
 // POST /file -> receive file
 app.post("/file", requireAuth, async (req, res) => {
   const today = new Date().toLocaleDateString("zh-CN").replaceAll("/", "-");
+  const start = Date.now();
   let fileName = "";
   try {
     await ensureDir(path.join(FILE_DIR, today));
