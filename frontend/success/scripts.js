@@ -132,7 +132,8 @@ async function fetchFiles(date) {
 fetchFiles(today);
 // fetch files when selected date
 date.addEventListener("change", (e) => {
-  const d = e.target.value;
+  const d = e.target.value || today;
+  date.value = date.value || today;
   console.log(`new date: ${d}`);
   fetchFiles(d);
 });
