@@ -24,9 +24,10 @@ const TRAFFIC_LOG_FILE = path.join(DIR, "traffic.log");
 // Return the formatted present date
 function getDate() {
   const now = new Date();
-  return `[${now.getFullYear()}-${(now.getMonth() + 1)
+  return `[${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}-${now
+    .getDate()
     .toString()
-    .padStart(2, "0")}-${now.getDate()} ${now.getHours().toString().padStart(2, "0")}:${now
+    .padStart(2, "0")} ${now.getHours().toString().padStart(2, "0")}:${now
     .getMinutes()
     .toString()
     .padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}]`;
@@ -251,7 +252,10 @@ app.post("/text", requireAuth, express.text({ limit: "1mb" }), async (req, res) 
 
 // POST /file -> receive file
 app.post("/file", requireAuth, async (req, res) => {
-  const today = new Date().toLocaleDateString("zh-CN").replaceAll("/", "-");
+  const todayRaw = new Date();
+  const today = `${todayRaw.getFullYear()}-${(todayRaw.getMonth() + 1)
+    .toString()
+    .padStart(2, "0")}-${todayRaw.getDate().toString().padStart(2, "0")}`;
   const start = Date.now();
   let fileName = "";
   try {
