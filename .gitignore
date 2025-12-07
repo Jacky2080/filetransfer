@@ -1,5 +1,6 @@
+backend/logs/
+backend/files/
+backend/key/
 *.log
-files/
-*.pem
 node_modules/
 .env

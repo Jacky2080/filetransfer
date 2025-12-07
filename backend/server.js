@@ -19,13 +19,14 @@ import {
   createDownloadHandler,
   createErrorHandler,
 } from "./src/router.js";
+import { createMessageHandler } from "./src/deepseek.js";
 config();
 
 const DIR = import.meta.dirname;
 const ROOT = path.resolve(DIR, "..");
-const LOG_FILE = path.join(DIR, "server.log");
+const LOG_FILE = path.join(DIR, "logs", "server.log");
 const FILE_DIR = path.join(DIR, "files/");
-const TRAFFIC_LOG_FILE = path.join(DIR, "traffic.log");
+const TRAFFIC_LOG_FILE = path.join(DIR, "logs", "traffic.log");
 
 // HTTPS configuration
 const sslOptions = {
@@ -71,7 +72,7 @@ const accessLogStream = createWriteStream(TRAFFIC_LOG_FILE, { flags: "a" });
 app.use(morgan("combined", { stream: accessLogStream }));
 
 app.use((req, res, next) => {
-  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.set("Cache-Control", "no-store, no-cache");
   res.set("Pragma", "no-cache");
   res.set("Expires", "0");
   next();
@@ -112,6 +113,9 @@ app.post("/test", testHandler);
 app.get("/success", requireAuth, (req, res) => {
   res.sendFile(path.join(ROOT, "frontend/success/success.html"));
 });
+app.get("/deepseek", requireAuth, (req, res) => {
+  res.sendFile(path.join(ROOT, "frontend/deepseek/deepseek.html"));
+});
 
 // GET /files -> return the file list
 app.get("/files", requireAuth, createFilesHandler({ FILE_DIR, LOG_FILE }));
@@ -126,8 +130,17 @@ app.post(
     LOG_FILE,
   })
 );
+
+const { monitHandler, downloadHandler, shutdownLogger } = createDownloadHandler({
+  FILE_DIR,
+  LOG_FILE,
+});
 // GET /download?id= -> send file to download
-app.get("/download", requireAuth, createDownloadHandler({ FILE_DIR, LOG_FILE }));
+app.get("/download", requireAuth, downloadHandler);
+// GET /monit -> send download records
+app.get("/monit", requireAuth, monitHandler);
+// POST /deepseek/message -> generate response
+app.post("/deepseek/message", requireAuth, createMessageHandler(process.env.API_KEY));
 // Handle express error
 app.use(createErrorHandler({ LOG_FILE }));
 
@@ -177,19 +190,46 @@ server.listen(availPort, HOST, async () => {
 });
 
 // Shut down
+async function gracefulShutdown() {
+  if (cleanupInterval) clearInterval(cleanupInterval);
+  console.log("Shutting down logger...");
+  await shutdownLogger();
+
+  return new Promise((resolve) => {
+    console.log("Closing server...");
+    server.close(() => {
+      console.log("Server closed");
+      resolve();
+    });
+
+    setTimeout(() => {
+      console.log("Server close timeout, forcing exit");
+      resolve();
+    }, 10000);
+  });
+}
+
 process.on("SIGINT", () => {
   console.log("Received SIGINT. Closing server...");
-  if (cleanupInterval) clearInterval(cleanupInterval);
-  server.close(() => {
-    console.log("Server closed");
-    process.exit(0);
-  });
+  gracefulShutdown()
+    .then(() => {
+      console.log("Graceful shutdown completed");
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error("Shutdown failed:", error);
+      process.exit(1);
+    });
 });
-process.on("SIGTERM", () => {
+process.on("SIGTERM", async () => {
   console.log("Received SIGTERM. Closing server...");
-  if (cleanupInterval) clearInterval(cleanupInterval);
-  server.close(() => {
-    console.log("Server closed");
-    process.exit(0);
-  });
+  gracefulShutdown()
+    .then(() => {
+      console.log("Graceful shutdown completed");
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error("Shutdown failed:", error);
+      process.exit(1);
+    });
 });

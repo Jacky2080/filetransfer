@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { log } from "./utils.js";
 
 function createAuth(LOG_FILE) {
@@ -35,9 +36,9 @@ function createAuth(LOG_FILE) {
   }
 
   async function testHandler(req, res) {
-    const pwd = process.env.PASSWORD;
-    const input = req.body.pwd;
-    if (pwd !== input) {
+    const pwd = Buffer.from(process.env.PASSWORD, "utf8");
+    const input = Buffer.from(req.body.pwd, "utf8");
+    if (!crypto.timingSafeEqual(pwd, input)) {
       await log(LOG_FILE, `[warn] Failed login attempt from ${req.ip}`);
       return res.redirect("/fail/");
     }

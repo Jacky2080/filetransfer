@@ -4,6 +4,7 @@ import path from "path";
 import { pipeline } from "stream/promises";
 import archiver from "archiver";
 import { log, ensureDir, getDate, getUniqueFileName } from "./utils.js";
+import DownloadLogger from "./monit.js";
 
 // Router exports handler factories. Server registers paths.
 
@@ -58,7 +59,7 @@ function createFileUploadHandler({ FILE_DIR, LOG_FILE }) {
     try {
       await ensureDir(LOG_FILE, path.join(FILE_DIR, today));
       console.log("receiving file");
-      await log(LOG_FILE, `[info] Start receiving file from ${req.ip}`);
+      await log(LOG_FILE, `[info] Start receiving file from IP ${req.ip}`);
       fileName = decodeURIComponent(req.headers["x-filename"]).replace(/[/\\?%*:|"<>]/g, "_");
       if (fileName.includes("..")) {
         fileName = fileName.replace(/\.\./g, "");
@@ -78,7 +79,7 @@ function createFileUploadHandler({ FILE_DIR, LOG_FILE }) {
       const duration = Date.now() - start;
       await log(
         LOG_FILE,
-        `[info] File "${fileName}" received successfully from ${req.ip}, size=${
+        `[info] File "${fileName}" received successfully from IP ${req.ip}, size=${
           req.headers["content-length"] || "unknown"
         } bytes, duration=${duration}ms`
       );
@@ -91,7 +92,13 @@ function createFileUploadHandler({ FILE_DIR, LOG_FILE }) {
 }
 
 function createDownloadHandler({ FILE_DIR, LOG_FILE }) {
-  return async function downloadHandler(req, res) {
+  const downloadLogger = new DownloadLogger(LOG_FILE);
+  async function monitHandler(req, res) {
+    const data = await downloadLogger.getMonitData();
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.send(JSON.stringify(data, null, 2));
+  }
+  async function downloadHandler(req, res) {
     try {
       const date = req.query.date;
       const namesString = req.query.names;
@@ -109,6 +116,7 @@ function createDownloadHandler({ FILE_DIR, LOG_FILE }) {
       }
 
       const dateDir = path.join(FILE_DIR, date);
+      downloadLogger.logger(req.ip, fileNames, date);
 
       if (fileNames.length === 1) {
         const finalFileName = path.basename(fileNames[0]);
@@ -183,7 +191,12 @@ function createDownloadHandler({ FILE_DIR, LOG_FILE }) {
         res.end();
       }
     }
-  };
+  }
+
+  async function shutdownLogger() {
+    await downloadLogger.shutdown();
+  }
+  return { monitHandler, downloadHandler, shutdownLogger };
 }
 
 function createErrorHandler({ LOG_FILE }) {

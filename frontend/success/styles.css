@@ -4,6 +4,39 @@ body {
   padding: 0;
 }
 
+.header {
+  width: 600px;
+  display: flex;
+  gap: 5px;
+  margin: 20px auto 15px;
+  gap: 15px;
+}
+
+.title {
+  color: #e48d21;
+  font-weight: bold;
+  font-size: 35px;
+  display: block;
+}
+
+a {
+  color: #e48d21;
+  text-decoration: none;
+  font-size: 15px;
+  border: 2px solid #d48d21;
+  font-weight: 750;
+  border-radius: 15px;
+  padding: 3px 8px;
+  height: 20px;
+  align-self: flex-end;
+}
+
+a:hover {
+  cursor: pointer;
+  color: #b48d00;
+  border: 2px solid #b48d00;
+}
+
 form {
   border: 1px solid #ddd;
   border-radius: 8px;
