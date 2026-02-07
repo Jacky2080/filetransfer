@@ -1,8 +1,10 @@
 const file = document.getElementById("file");
 const dropArea = document.getElementById("drop-area");
+const selectBtn = document.getElementById("select-all-btn");
 const fileBtn = document.getElementById("fileBtn");
 const fetchBtn = document.getElementById("fetchBtn");
 const date = document.getElementById("date");
+let selectAllListener;
 
 const now = new Date();
 const pad = (n) => n.toString().padStart(2, "0");
@@ -150,6 +152,11 @@ async function downloadFiles(date, names) {
   a.click();
   console.log(`zip file requested for ${names.length} files`);
 }
+
+// click button to select all
+selectBtn.addEventListener("click", () => {
+  document.querySelectorAll(".checkbox-input").forEach((o) => (o.checked = true));
+});
 
 // click to fetch files
 fetchBtn.addEventListener("click", () => {

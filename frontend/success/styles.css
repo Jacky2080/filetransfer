@@ -96,6 +96,7 @@ button {
   border: 1px solid #d48d21;
   border-radius: 5px;
   padding: 3px 8px;
+  cursor: pointer;
 }
 
 h3 {
@@ -106,6 +107,10 @@ h3 {
 #date {
   display: inline-block;
   vertical-align: middle;
+}
+
+#date + button {
+  margin-left: 3px;
 }
 
 #files {
