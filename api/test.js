@@ -1,7 +1,9 @@
-import { sign } from "jsonwebtoken";
+import { SignJWT } from "jose";
 import { timingSafeEqual } from "crypto";
 import { serialize } from "cookie";
 import { getIp } from "./utils.js";
+
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -26,7 +28,11 @@ export default async function handler(req, res) {
     return res.redirect("/fail/");
   }
 
-  const token = sign({ user: "authenticated" }, process.env.JWT_SECRET, { expiresIn: "3d" });
+  const token = await new SignJWT({ user: "authenticated" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("3d")
+    .sign(JWT_SECRET);
 
   const cookie = serialize("token", token, {
     path: "/",

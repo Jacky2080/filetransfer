@@ -1,7 +1,7 @@
 import { jwtVerify } from "jose";
 import { parse } from "cookie";
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
 export async function verifyToken(req, res) {
   const cookieHeader =

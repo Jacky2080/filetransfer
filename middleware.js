@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { parse } from "cookie";
 import { jwtVerify } from "jose";
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
 export async function middleware(req) {
   const { pathname } = req.nextUrl;
