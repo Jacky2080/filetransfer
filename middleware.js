@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { parse } from "cookie";
-import jose from "jose";
+import { jwtVerify } from "jose";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -19,7 +19,7 @@ export async function middleware(req) {
   let isValid = false;
   if (token) {
     try {
-      await jose.jwtVerify(token, JWT_SECRET);
+      await jwtVerify(token, JWT_SECRET);
       isValid = true;
     } catch {
       isValid = false;

@@ -1,4 +1,4 @@
-import jose from "jose";
+import { jwtVerify } from "jose";
 import { parse } from "cookie";
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -16,7 +16,7 @@ export async function verifyToken(req, res) {
   let isValid = false;
   if (token) {
     try {
-      await jose.jwtVerify(token, JWT_SECRET);
+      await jwtVerify(token, JWT_SECRET);
       isValid = true;
     } catch {
       isValid = false;
