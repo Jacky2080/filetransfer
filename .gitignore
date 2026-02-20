@@ -4,3 +4,4 @@ backend/key/
 *.log
 node_modules/
 .env
+.vercel

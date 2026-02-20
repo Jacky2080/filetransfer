@@ -1,12 +1,16 @@
 {
   "version": 2,
-  "routes": [
-    { "src": "/test", "dest": "/api/test.js", "methods": ["POST"] },
-    { "src": "/files", "dest": "/api/fileList.js", "methods": ["GET"] },
-    { "src": "/file", "dest": "/api/upload.js", "methods": ["POST"] },
-    { "src": "/download", "dest": "/api/download.js", "methods": ["GET"] },
-    { "src": "/deepseek/message", "dest": "/api/deepseek.js", "methods": ["POST"] },
-    { "src": "/(.*)", "dest": "/public/$1" }
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    { "source": "/test", "destination": "/api/test.js" },
+    { "source": "/files", "destination": "/api/fileList.js" },
+    { "source": "/file", "destination": "/api/upload.js" },
+    { "source": "/download", "destination": "/api/download.js" },
+    { "source": "/deepseek/message", "destination": "/api/deepseek.js" },
+    { "source": "/success", "destination": "/success/index.html" },
+    { "source": "/fail", "destination": "/fail/index.html" },
+    { "source": "/deepseek", "destination": "/deepseek/index.html" }
   ],
   "crons": [
     {

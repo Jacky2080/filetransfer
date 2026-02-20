@@ -32,7 +32,7 @@ export async function middleware(req) {
     return isValid ? NextResponse.redirect(successUrl) : NextResponse.redirect(loginUrl);
   }
 
-  if ((pathname.startsWith("/success/") || pathname.startsWith("/deepseek/")) && !isValid) {
+  if ((pathname.startsWith("/success") || pathname.startsWith("/deepseek")) && !isValid) {
     return NextResponse.redirect(loginUrl);
   }
 

@@ -25,7 +25,7 @@ export default async function handler(req, res) {
 
   if (pwd.length !== input.length || !timingSafeEqual(pwd, input)) {
     console.warn(`[AUTH FAILED] IP: ${ip} | Time: ${new Date().toISOString()}`);
-    return res.redirect("/fail/");
+    return res.redirect("/fail");
   }
 
   const token = await new SignJWT({ user: "authenticated" })
@@ -45,5 +45,5 @@ export default async function handler(req, res) {
   res.setHeader("Set-Cookie", cookie);
   console.log(`[AUTH SUCCESS] IP: ${ip} | Time: ${new Date().toISOString()}`);
 
-  return res.redirect("/success/");
+  return res.redirect("/success");
 }
