@@ -1,5 +1,5 @@
 import { OpenAI } from "openai";
-import { requireAuth, getClientIp } from "./utils.js";
+import { verifyToken, getIp } from "./utils.js";
 
 export const config = {
   api: {
@@ -49,7 +49,7 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Credentials", "true");
 
-  if (!requireAuth(req, res)) return;
+  if (!verifyToken(req, res)) return;
 
   // Handle pre-request
   if (req.method === "OPTIONS") {
@@ -60,7 +60,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const ip = getClientIp(req);
+  const ip = getIp(req);
 
   try {
     let { messages } = req.body;
