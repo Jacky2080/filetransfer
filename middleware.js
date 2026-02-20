@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { parse } from "cookie";
-import jwt from "jsonwebtoken";
+import jose from "jose";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
-export function middleware(req) {
+export async function middleware(req) {
   const { pathname } = req.nextUrl;
 
   // Exclude static resources
@@ -19,7 +19,7 @@ export function middleware(req) {
   let isValid = false;
   if (token) {
     try {
-      jwt.verify(token, JWT_SECRET);
+      await jose.jwtVerify(token, JWT_SECRET);
       isValid = true;
     } catch {
       isValid = false;
@@ -29,17 +29,11 @@ export function middleware(req) {
   const loginUrl = new URL("/fail/index.html", req.url);
   const successUrl = new URL("/success/index.html", req.url);
   if (pathname === "/" || pathname === "/index.html") {
-    if (isValid) {
-      return NextResponse.redirect(successUrl);
-    } else {
-      return NextResponse.redirect(loginUrl);
-    }
+    return isValid ? NextResponse.redirect(successUrl) : NextResponse.redirect(loginUrl);
   }
 
-  if (pathname.startsWith("/success/") || pathname.startsWith("/deepseek/")) {
-    if (!isValid) {
-      return NextResponse.redirect(loginUrl);
-    }
+  if ((pathname.startsWith("/success/") || pathname.startsWith("/deepseek/")) && !isValid) {
+    return NextResponse.redirect(loginUrl);
   }
 
   return NextResponse.next();

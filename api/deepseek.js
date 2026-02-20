@@ -49,7 +49,7 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Credentials", "true");
 
-  if (!verifyToken(req, res)) return;
+  if (!(await verifyToken(req, res))) return;
 
   // Handle pre-request
   if (req.method === "OPTIONS") {

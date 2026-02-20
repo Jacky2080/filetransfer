@@ -1,16 +1,22 @@
-import jwt from "jsonwebtoken";
+import jose from "jose";
 import { parse } from "cookie";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
-export function verifyToken(req, res) {
-  const cookieHeader = req.headers.get("cookie") || "";
+export async function verifyToken(req, res) {
+  const cookieHeader =
+    (typeof req.headers.get === "function" ? req.headers.get("cookie") : req.headers["cookie"]) ||
+    "";
   const cookies = parse(cookieHeader);
   const token = cookies.token;
+  if (!token) {
+    res.status(401).json({ error: "Unauthorized" });
+    return false;
+  }
   let isValid = false;
   if (token) {
     try {
-      jwt.verify(token, JWT_SECRET);
+      await jose.jwtVerify(token, JWT_SECRET);
       isValid = true;
     } catch {
       isValid = false;
