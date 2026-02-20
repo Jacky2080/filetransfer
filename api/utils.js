@@ -30,6 +30,9 @@ export async function verifyToken(req, res) {
 }
 
 export function getIp(req) {
-  const forwarded = req.headers.get("x-forwarded-for");
+  const forwarded =
+    typeof req.headers.get === "function"
+      ? req.headers.get("x-forwarded-for")
+      : req.headers["x-forwarded-for"];
   return typeof forwarded === "string" ? forwarded.split(",")[0].trim() : "unknown";
 }
