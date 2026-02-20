@@ -4,7 +4,6 @@ const selectBtn = document.getElementById("select-all-btn");
 const fileBtn = document.getElementById("fileBtn");
 const fetchBtn = document.getElementById("fetchBtn");
 const date = document.getElementById("date");
-let selectAllListener;
 
 const now = new Date();
 const pad = (n) => n.toString().padStart(2, "0");

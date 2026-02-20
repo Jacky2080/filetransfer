@@ -22,19 +22,18 @@
   },
   "homepage": "https://github.com/Jacky2080/filetransfer#readme",
   "dependencies": {
+    "@vercel/blob": "^2.3.0",
     "archiver": "^7.0.1",
-    "cookie-parser": "^1.4.7",
+    "cookie": "^1.1.1",
     "dotenv": "^16.4.5",
-    "express": "^5.1.0",
-    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
-    "morgan": "^1.10.1",
-    "node-notifier": "^10.0.1",
+    "next": "^16.1.6",
     "openai": "^6.10.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "eslint": "^9.39.1",
-    "globals": "^16.5.0"
+    "globals": "^16.5.0",
+    "vercel": "^50.20.0"
   }
 }

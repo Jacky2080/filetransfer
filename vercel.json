@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "routes": [
+    { "src": "/test", "dest": "/api/test.js", "methods": ["POST"] },
+    { "src": "/files", "dest": "/api/fileList.js", "methods": ["GET"] },
+    { "src": "/file", "dest": "/api/upload.js", "methods": ["POST"] },
+    { "src": "/download", "dest": "/api/download.js", "methods": ["GET"] },
+    { "src": "/deepseek/message", "dest": "/api/deepseek.js", "methods": ["POST"] },
+    { "src": "/(.*)", "dest": "/public/$1" }
+  ],
+  "crons": [
+    {
+      "path": "/api/cleanup.js",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}

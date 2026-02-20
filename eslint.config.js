@@ -56,7 +56,7 @@ export default [
 
       // 未使用的变量报错（你的核心需求）
       "no-unused-vars": [
-        "error",
+        "warn",
         {
           vars: "all", // 检查所有变量
           args: "all", // 检查所有参数
@@ -80,7 +80,7 @@ export default [
       ],
 
       // ========== 代码风格基础 ==========
-      indent: ["error", 2],
+      "indent": ["warn", 2],
       // 'quotes': ['error', 'single'],
       // semi: ["error", "always"],
       // eqeqeq: ["error", "always"],
