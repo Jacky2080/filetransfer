@@ -1,144 +1,24 @@
 "use client";
-import { useState, useEffect, use } from "react";
-import OSS from "ali-oss";
+import { use } from "react";
+import { useAuth, DeleteForm } from "@/components";
+import type { RoomConfig } from "@/components/types";
 import "./styles.css";
-
-interface FileObj {
-  name: string;
-  url: string;
-}
-
-function getToday() {
-  const now = new Date();
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  return today;
-}
-
-async function getFileList(date: string, client: OSS, room: string) {
-  const prefix = `rooms/${room}/${date}/`;
-  const fileList = (await client.list({
-    prefix: prefix,
-  })) as { objects: FileObj[] };
-
-  return fileList.objects
-    .filter((f) => f.name !== prefix)
-    .map((f) => ({ name: f.name.replace(prefix, ""), url: f.url }));
-}
 
 export default function Delete({ params }: { params: Promise<{ roomName: string }> }) {
   const { roomName } = use(params);
-  const [date, setDate] = useState(getToday());
-  const [fileList, setFileList] = useState<{ name: string; url: string }[]>([]);
-  const [selectedNames, setSelectedNames] = useState<string[]>([]);
-  const [OSSClient, setOSSCLIent] = useState<OSS | null>(null);
-  const [deleting, setDeleting] = useState(false);
 
-  // Get OSS Client
-  useEffect(() => {
-    const getClient = async () => {
-      const response = await fetch("/auth");
-      if (response.status === 500 || !response.ok) {
-        console.error("Error getting sts token");
-        return;
-      }
-      const tokens = await response.json();
-      const { accessKeyId, accessKeySecret, stsToken, bucket } = tokens;
-      const OSS = (await import("ali-oss")).default;
-      const client = new OSS({
-        region: "oss-cn-shanghai",
-        authorizationV4: true,
-        secure: true,
-        bucket: bucket,
-        accessKeyId,
-        accessKeySecret,
-        stsToken,
-        refreshSTSToken: async () => {
-          try {
-            const response = await fetch("/auth");
-            const { accessKeyId, accessKeySecret, stsToken } = await response.json();
-            return { accessKeyId, accessKeySecret, stsToken };
-          } catch {
-            throw new Error("Failed to get STS");
-          }
-        },
-        refreshSTSTokenInterval: 3600000,
-      });
-      setOSSCLIent(client);
-    };
-    getClient();
-  }, []);
-
-  // Update file list when changing selected date
-  useEffect(() => {
-    const updateDate = async () => {
-      if (!OSSClient) return;
-      try {
-        const newFileList = await getFileList(date, OSSClient, roomName);
-        setFileList(newFileList);
-      } catch {
-        console.error(`Error when getting file list of date ${date}`);
-      }
-    };
-    updateDate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, OSSClient]);
-
-  const handleCheck = (name: string) => {
-    setSelectedNames((prev) =>
-      prev.includes(name) ? prev.filter((item) => item !== name) : [...prev, name]
-    );
+  const roomConfig: RoomConfig = {
+    prefix: `rooms/${roomName}`,
+    authEndpoint: "/auth",
+    room: roomName,
+    archiveDays: 14,
+    enableZipEndpoint: false,
+    title: "",
   };
 
-  const handleSelectAll = () =>
-    fileList.length === selectedNames.length
-      ? setSelectedNames([])
-      : setSelectedNames(fileList.map((f) => f.name));
+  const { jwtToken, OSSClient } = useAuth(roomConfig);
 
-  // Delete multiple files
-  async function deleteFiles() {
-    setDeleting(true);
-    setSelectedNames([]);
-    try {
-      const files = selectedNames.map((f) => `rooms/${roomName}/${date}/${f}`);
-      await OSSClient!.deleteMulti(files);
-    } catch (e) {
-      alert(`Failed to delete: ${e}`);
-    } finally {
-      setDeleting(false);
-      const newFileList = await getFileList(date, OSSClient!, roomName);
-      setFileList(newFileList);
-    }
-  }
+  if (!OSSClient || !jwtToken) return null;
 
-  return (
-    <form>
-      <div>
-        <h3>Fetch File</h3>
-        <input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        <button type="button" id="select-all-btn" onClick={handleSelectAll}>
-          {fileList.length === selectedNames.length ? "Deselect" : "Select All"}
-        </button>
-        <div id="files">
-          {fileList.map((f) => (
-            <div className="options" key={f.url}>
-              <input
-                type="checkbox"
-                id={f.url}
-                className="checkbox-input"
-                checked={selectedNames.includes(f.name)}
-                onChange={() => handleCheck(f.name)}
-              ></input>
-              <label htmlFor={f.url} className="checkbox-label">
-                {f.name}
-              </label>
-            </div>
-          ))}
-        </div>
-        <button type="button" id="deleteBtn" onClick={deleteFiles}>
-          {deleting ? "Deleting" : "Delete"}
-        </button>
-      </div>
-    </form>
-  );
+  return <DeleteForm OSSClient={OSSClient} jwtToken={jwtToken} config={roomConfig} />;
 }

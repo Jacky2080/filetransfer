@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import OSS from "ali-oss";
 import "./styles.css";
 import dynamic from "next/dynamic";
+import { useAuth, DeleteForm, padDate } from "@/components";
+import type { RoomConfig } from "@/components/types";
 
 interface FileObj {
   name: string;
@@ -11,197 +13,13 @@ interface FileObj {
   size: number;
 }
 
-const pad = (n: number) => n.toString().padStart(2, "0");
-const padDate = (time: Date) =>
-  `${time.getFullYear()}-${pad(time.getMonth() + 1)}-${pad(time.getDate())}`;
-
-function getToday() {
-  const now = new Date();
-  return padDate(now);
-}
-
-async function getFileList(date: string, client: OSS) {
-  const prefix = `files/${date}/`;
-  const fileList = (await client.list({
-    prefix: prefix,
-  })) as { objects: FileObj[] };
-
-  return fileList.objects
-    .filter((f) => f.name !== prefix)
-    .map((f) => ({ name: f.name.replace(prefix, ""), url: f.url }));
-}
-
-function DeleteForm({ OSSClient, jwtToken }: { OSSClient: OSS; jwtToken: string }) {
-  const [date, setDate] = useState(getToday());
-  const [fileList, setFileList] = useState<{ name: string; url: string }[]>([]);
-  const [selectedNames, setSelectedNames] = useState<string[]>([]);
-  const [btnMsg, setBtnMsg] = useState("Delete");
-  const [deleting, setDeleting] = useState(false);
-  const [renaming, setRenaming] = useState(false);
-  const [editingName, setEditingName] = useState<string | null>(null);
-  const [tempName, setTempName] = useState("");
-
-  // Update file list when changing selected date
-  useEffect(() => {
-    const updateDate = async () => {
-      if (!OSSClient) return;
-      try {
-        const newFileList = await getFileList(date, OSSClient);
-        setFileList(newFileList);
-      } catch {
-        console.error(`Error when getting file list of date ${date}`);
-      }
-    };
-    updateDate();
-  }, [date, OSSClient]);
-
-  const handleCheck = (name: string) => {
-    setSelectedNames((prev) =>
-      prev.includes(name) ? prev.filter((item) => item !== name) : [...prev, name]
-    );
-  };
-
-  const handleSelectAll = () =>
-    fileList.length === selectedNames.length
-      ? setSelectedNames([])
-      : setSelectedNames(fileList.map((f) => f.name));
-
-  // Delete multiple files
-  async function deleteFiles() {
-    if (selectedNames.length === 0) return;
-    if (!window.confirm("Sure to delete?")) return;
-
-    setDeleting(true);
-    setBtnMsg("Deleting");
-    setSelectedNames([]);
-    try {
-      const files = selectedNames.map((f) => `files/${date}/${f}`);
-      await OSSClient!.deleteMulti(files);
-      fetch("https://file-trnsfer-fc-hcuthkwduw.cn-shanghai.fcapp.run/oper", {
-        method: "PUT",
-        headers: {
-          "Authorization": `Bearer ${jwtToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          oper: "delete",
-          files: files.map((f) => f.slice(17)),
-          date,
-        }),
-      });
-
-      (async function () {
-        if (date == getToday() && window.confirm("Send /zip request?")) {
-          const response = await fetch(
-            "https://file-trnsfer-fc-hcuthkwduw.cn-shanghai.fcapp.run/zip",
-            {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${jwtToken}`,
-                "Content-Type": "application/json",
-              },
-            }
-          );
-
-          if (response.status === 201) {
-            const result = await response.json();
-            console.log(result.name);
-          } else {
-            window.alert("Failed to zip");
-          }
-        }
-      })();
-    } catch (e) {
-      window.alert(`Failed to delete: ${e}`);
-    } finally {
-      setDeleting(false);
-      setBtnMsg("Delete");
-      const newFileList = await getFileList(date, OSSClient!);
-      setFileList(newFileList);
-    }
-  }
-
-  async function renameFile(dest: string, src: string) {
-    setRenaming(true);
-    setBtnMsg("Renaming");
-    try {
-      await OSSClient.copy(dest, src);
-      await OSSClient.delete(src);
-      setFileList(await getFileList(date, OSSClient));
-    } catch (e) {
-      console.error(`Failed to rename file: ${e}`);
-      window.alert("Failed to rename");
-    } finally {
-      setRenaming(false);
-      setBtnMsg("Delete");
-    }
-  }
-
-  return (
-    <form className="delete-form">
-      <div>
-        <h3>Delete Files</h3>
-        <input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        <button type="button" id="select-all-btn" onClick={handleSelectAll}>
-          {fileList.length === selectedNames.length ? "Deselect" : "Select All"}
-        </button>
-        <div id="files">
-          {fileList.map((f) => (
-            <div className="options" key={f.url}>
-              <input
-                type="checkbox"
-                id={f.url}
-                className="checkbox-input"
-                checked={selectedNames.includes(f.name)}
-                onChange={() => handleCheck(f.name)}
-              ></input>
-              {editingName === f.name ? (
-                <input
-                  type="text"
-                  value={tempName}
-                  onChange={(e) => setTempName(e.target.value)}
-                  onBlur={async () => {
-                    setEditingName(null);
-                    if (tempName && tempName !== f.name) {
-                      const src = `files/${date}/${f.name}`;
-                      const dest = `files/${date}/${tempName}`;
-                      if (!window.confirm("Sure to rename?")) return;
-                      await renameFile(dest, src);
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      (e.target as HTMLInputElement).blur();
-                    }
-                    if (e.key === "Escape") {
-                      setEditingName(null); // Cancel editing
-                    }
-                  }}
-                  autoFocus
-                  onClick={(e) => e.stopPropagation()} // Prevent checking checkbox
-                />
-              ) : (
-                <label
-                  htmlFor={f.url}
-                  className="checkbox-label"
-                  onDoubleClick={() => {
-                    setEditingName(f.name);
-                    setTempName(f.name);
-                  }}
-                >
-                  {f.name}
-                </label>
-              )}
-            </div>
-          ))}
-        </div>
-        <button type="button" id="deleteBtn" onClick={deleteFiles} disabled={deleting || renaming}>
-          {btnMsg}
-        </button>
-      </div>
-    </form>
-  );
-}
+const adminConfig: RoomConfig = {
+  prefix: "files",
+  authEndpoint: "/auth/",
+  archiveDays: 7,
+  enableZipEndpoint: true,
+  title: "File Transfer",
+};
 
 function CreateRoom({ jwtToken }: { jwtToken: string }) {
   const [name, setName] = useState("");
@@ -446,44 +264,8 @@ function DropDuplicate({ OSSClient, jwtToken }: { OSSClient: OSS; jwtToken: stri
 }
 
 export default function Admin() {
-  const [jwtToken, setJwtToken] = useState<any>(null);
-  const [OSSClient, setOSSCLIent] = useState<any>(null);
+  const { jwtToken, OSSClient } = useAuth(adminConfig);
   const [showTraffic, setShowTraffic] = useState(false);
-
-  useEffect(() => {
-    const getAuth = async () => {
-      const response = await fetch("/auth/");
-      if (response.status === 500 || !response.ok) {
-        console.error("Error when authenticating");
-        return;
-      }
-      const tokens = await response.json();
-      const { accessKeyId, accessKeySecret, stsToken, bucket, jwtToken } = tokens;
-      const OSS = (await import("ali-oss")).default;
-      const client = new OSS({
-        region: "oss-cn-shanghai",
-        authorizationV4: true,
-        secure: true,
-        bucket: bucket,
-        accessKeyId,
-        accessKeySecret,
-        stsToken,
-        refreshSTSToken: async () => {
-          try {
-            const response = await fetch("/auth/");
-            const { accessKeyId, accessKeySecret, stsToken } = await response.json();
-            return { accessKeyId, accessKeySecret, stsToken };
-          } catch {
-            throw new Error("Failed to get STS");
-          }
-        },
-        refreshSTSTokenInterval: 3600000,
-      });
-      setOSSCLIent(client);
-      setJwtToken(jwtToken);
-    };
-    getAuth();
-  }, []);
 
   const Traffic = dynamic(() => import("./Traffic"), {
     loading: () => <p>Traffic is Loading...</p>,
@@ -493,9 +275,13 @@ export default function Admin() {
     <>
       {!showTraffic ? (
         <div className="container">
-          <DeleteForm OSSClient={OSSClient} jwtToken={jwtToken} />
-          <CreateRoom jwtToken={jwtToken} />
-          <DropDuplicate OSSClient={OSSClient} jwtToken={jwtToken} />
+          {OSSClient && jwtToken && (
+            <>
+              <DeleteForm OSSClient={OSSClient} jwtToken={jwtToken} config={adminConfig} />
+              <CreateRoom jwtToken={jwtToken} />
+              <DropDuplicate OSSClient={OSSClient} jwtToken={jwtToken} />
+            </>
+          )}
           <div style={{ alignSelf: "flex-end" }}>
             <button type="button" onClick={() => setShowTraffic(true)}>
               Show Traffic

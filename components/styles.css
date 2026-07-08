@@ -15,8 +15,12 @@ body {
 .title {
   color: #e48d21;
   font-weight: bold;
-  font-size: 30px;
+  font-size: 35px;
   display: block;
+}
+
+.title-room {
+  font-size: 30px;
   overflow: hidden;
   max-width: 100%;
   white-space: nowrap;
@@ -33,6 +37,7 @@ body {
   padding: 3px 8px;
   height: 20px;
   align-self: flex-end;
+  white-space: nowrap;
 }
 
 a:hover {
@@ -80,12 +85,7 @@ label {
   border-color: #d48d21;
 }
 
-#file {
-  /* margin: 5px;
-  width: 200px;
-  padding: 5px 8px;
-  border: 1px solid #aaa;
-  border-radius: 5px; */
+#droparea-file {
   display: none;
 }
 
@@ -208,7 +208,6 @@ button.reg-btn {
   padding: 3px 5px;
   cursor: pointer;
   white-space: nowrap;
-  /* overflow: hidden; */
   text-overflow: ellipsis;
   display: flex;
   justify-content: space-between;
@@ -247,6 +246,10 @@ button.reg-btn {
 
 .options {
   display: flex;
+}
+
+.options.options-blue {
+  color: #0000ff;
 }
 
 .checkbox-label {
@@ -308,7 +311,7 @@ footer {
     width: 450px;
   }
 
-  form {
+  form.file-form {
     width: 450px;
   }
 
@@ -327,7 +330,7 @@ footer {
     width: 350px;
   }
 
-  form {
+  form.file-form {
     width: 350px;
   }
 
