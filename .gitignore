@@ -48,6 +48,9 @@ backend/key/
 *.log
 temp.*
 *.exe
+*.ex~
+*.~
 *.old.*
 download/
 private/
+rsrc.syso

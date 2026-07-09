@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"log"
 	"os"
@@ -47,15 +48,18 @@ var (
 
 	config *oss.Config
 	client *oss.Client
+
+	//go:embed .env
+	envFile string
 )
 
 func init() {
 	// Load envs
-	godotenv.Load("../../../.env")
+	envMap, _ := godotenv.Unmarshal(envFile)
 
 	// Initiate OSS client
 	config = oss.LoadDefaultConfig().
-		WithCredentialsProvider(credentials.NewStaticCredentialsProvider(os.Getenv("OSS_ACCESS_KEY_ID"), os.Getenv("OSS_ACCESS_KEY_SECRET"), "")).
+		WithCredentialsProvider(credentials.NewStaticCredentialsProvider(envMap["OSS_ACCESS_KEY_ID"], envMap["OSS_ACCESS_KEY_SECRET"], "")).
 		WithRegion("cn-shanghai")
 	client = oss.NewClient(config)
 

@@ -4,24 +4,49 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
+	"path"
+	"time"
 
 	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss"
 )
 
+var bucketName = "files-for-transfer"
+
 func putObj(objectName, filePath string) error {
-	putRequest := &oss.PutObjectRequest{
-		Bucket:       oss.Ptr("files-for-transfer"),
+	type progressMsg struct {
+		increment   int64
+		transferred int64
+		total       int64
+	}
+	type model struct {
+		transferred int64
+		total       int64
+	}
+
+	startU := time.Now()
+	cwd, _ := os.Getwd()
+	uploader := client.NewUploader(func(uo *oss.UploaderOptions) {
+		uo.CheckpointDir = path.Join(cwd, "checkpoint")
+		uo.EnableCheckpoint = true
+		uo.PartSize = 64 * 1024
+		// uo.ParallelNum = 5
+	})
+	request := &oss.PutObjectRequest{
+		Bucket:       oss.Ptr(bucketName),
 		Key:          oss.Ptr(objectName),
 		StorageClass: oss.StorageClassStandard,
 		Acl:          oss.ObjectACLPrivate,
+		ProgressFn: func(increment, transferred, total int64) {
+			fmt.Printf("increment:%v, transferred:%v, total:%v\n", increment, transferred, total)
+		},
 	}
-
-	_, err := client.PutObjectFromFile(context.TODO(), putRequest, filePath)
+	_, err := uploader.UploadFile(context.TODO(), request, filePath)
 	if err != nil {
+		fmt.Printf("Failed to upload file \"%s\": %v\n", filePath, err)
 		return err
 	}
+	fmt.Printf("used %v to upload\n", time.Since(startU))
 
 	fmt.Printf("Successfully uploaded file \"%s\"\n\n", objectName)
 	return nil
@@ -31,7 +56,7 @@ func listObj(prefix string) ([]FileInfo, error) {
 	// Return a FileInfo list with prefix in file names
 	var fileInfo []FileInfo
 	listRequest := &oss.ListObjectsV2Request{
-		Bucket: oss.Ptr("files-for-transfer"),
+		Bucket: oss.Ptr(bucketName),
 		Prefix: oss.Ptr(prefix),
 	}
 	for {
@@ -58,7 +83,7 @@ func getObj(fileName, downloadPath, fullName string) {
 	fmt.Printf("Start to download file \"%s\"\n", fileName)
 
 	getRequest := &oss.GetObjectRequest{
-		Bucket: oss.Ptr("files-for-transfer"),
+		Bucket: oss.Ptr(bucketName),
 		Key:    oss.Ptr(fullName),
 	}
 	result, err := client.GetObject(context.TODO(), getRequest)
@@ -88,16 +113,44 @@ func getObj(fileName, downloadPath, fullName string) {
 
 func deleteMultiObj(deleteObjects []oss.DeleteObject) error {
 	deleteRequest := &oss.DeleteMultipleObjectsRequest{
-		Bucket: oss.Ptr("files-for-transfer"),
+		Bucket: oss.Ptr(bucketName),
 		Delete: &oss.Delete{
 			Objects: deleteObjects,
 		},
 	}
 	_, err := client.DeleteMultipleObjects(context.TODO(), deleteRequest)
 	if err != nil {
-		log.Fatalf("failed to delete multiple objects %v", err)
+		fmt.Printf("Failed to delete multiple objects: %v\n", err)
 		return err
 	}
 	fmt.Print("Successfully deleted\n\n")
+	return nil
+}
+
+func renameObj(srcName, destName string) error {
+	copyRequest := &oss.CopyObjectRequest{
+		Bucket:       oss.Ptr(bucketName),
+		Key:          oss.Ptr(destName),
+		SourceKey:    oss.Ptr(srcName),
+		SourceBucket: oss.Ptr(bucketName),
+		StorageClass: oss.StorageClassStandard,
+	}
+	_, err := client.CopyObject(context.TODO(), copyRequest)
+	if err != nil {
+		fmt.Printf("Failed to copy object: %v\n", err)
+		return err
+	}
+
+	deleteRequest := &oss.DeleteObjectRequest{
+		Bucket: oss.Ptr(bucketName),
+		Key:    oss.Ptr(srcName),
+	}
+	_, err = client.DeleteObject(context.TODO(), deleteRequest)
+	if err != nil {
+		fmt.Printf("Failed to delete object: %v\n", err)
+		return err
+	}
+
+	fmt.Printf("Successfully renamed file %s to %s\n\n", srcName, destName)
 	return nil
 }
