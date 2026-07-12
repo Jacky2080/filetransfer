@@ -30,6 +30,7 @@ export default function Success() {
         <div className="title">{mainConfig.title}</div>
         <Link href="/deepseek">DeepSeek</Link>
         <Link href="/?change">Change Room</Link>
+        <Link href="/convert">Convert</Link>
       </div>
       <FileTransfer jwtToken={jwtToken} OSSClient={OSSClient} config={mainConfig} />
       <footer>&copy; 2026 Jacky</footer>

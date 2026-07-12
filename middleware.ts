@@ -42,7 +42,7 @@ export async function middleware(req: NextRequest) {
 
   if (
     pathname !== "/" &&
-    !["/auth", "/deepseek", "/success", "/rooms"].some((r) => pathname.startsWith(r))
+    !["/auth", "/success", "/deepseek", "/convert", "/rooms"].some((r) => pathname.startsWith(r))
   )
     return NextResponse.redirect(new URL("/", req.url));
 
@@ -58,7 +58,7 @@ export async function middleware(req: NextRequest) {
         path: "/",
         httpOnly: true,
         secure: true,
-        sameSite: "none",
+        sameSite: "lax",
         maxAge: 3 * 24 * 60 * 60,
       });
     }

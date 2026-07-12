@@ -1,0 +1,136 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 30px 50px;
+  margin: auto;
+  gap: 20px;
+}
+
+.convert-title {
+  display: flex;
+  gap: 15px;
+  flex-flow: wrap;
+  color: #e48d21;
+  font-weight: bold;
+  font-size: 45px;
+}
+
+.convert-title + div {
+  font-size: 25px;
+  color: #666;
+}
+
+.convert-links {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.convert-link {
+  width: 100%;
+  display: flex;
+  box-sizing: border-box;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 20px;
+  background: white;
+  padding: 10px 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  border-left: 5px solid #e48d21;
+}
+
+.convert-link:hover {
+  transform: translateX(5px);
+  box-shadow: 0 8px 15px rgba(228, 141, 33, 0.2);
+  border-left-color: #b48d00;
+}
+
+.convert-link a {
+  color: #e48d21;
+  text-decoration: none;
+  font-weight: 600;
+  padding: 5px 15px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  background: rgba(228, 141, 33, 0.1);
+}
+
+.convert-link a:hover {
+  cursor: pointer;
+  color: #b48d00;
+  background: rgba(228, 141, 33, 0.2);
+  transform: scale(1.05);
+}
+
+.convert-link div {
+  color: #666;
+  font-size: 0.9em;
+}
+
+@media (max-width: 700px) {
+  .container {
+    padding: 20px;
+    gap: 15px;
+  }
+
+  .convert-title {
+    font-size: 35px;
+  }
+
+  .convert-title + div {
+    font-size: 20px;
+  }
+
+  .convert-link {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 18px 20px;
+  }
+
+  .convert-link a {
+    width: 100%;
+    text-align: center;
+    box-sizing: border-box;
+  }
+
+  .convert-link div {
+    text-align: center;
+    margin-left: 0;
+    width: 100%;
+    font-size: 0.85em;
+    color: #888;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 15px;
+  }
+
+  .convert-title {
+    font-size: 28px;
+  }
+
+  .convert-title + div {
+    font-size: 18px;
+  }
+
+  .convert-link {
+    padding: 15px;
+    border-radius: 8px;
+  }
+
+  .convert-link a {
+    font-size: 0.95em;
+    padding: 6px 12px;
+  }
+
+  .convert-link div {
+    font-size: 0.8em;
+  }
+}
