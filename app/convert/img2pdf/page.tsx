@@ -11,6 +11,7 @@ interface ImageItem {
   width: number;
   height: number;
   url: string;
+  file: File;
 }
 
 function UploadArea() {
@@ -23,6 +24,7 @@ function UploadArea() {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isInsertBefore, setIsInsertBefore] = useState<boolean>(true);
   const [activeMoveId, setActiveMoveId] = useState<string | null>(null);
+  const [quality, setQuality] = useState(1);
 
   function formatFileSize(size: number) {
     const KB = 1024;
@@ -51,6 +53,34 @@ function UploadArea() {
     });
   }
 
+  function getImageURL(file: File): Promise<string> {
+    return new Promise((resolve) => {
+      const img = new window.Image();
+      const src = URL.createObjectURL(file);
+      img.src = src;
+
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0);
+
+        URL.revokeObjectURL(src);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              resolve(URL.createObjectURL(blob));
+            }
+          },
+          "image/jpeg",
+          quality
+        );
+      };
+    });
+  }
+
   async function addToList(imgs: File[]) {
     Promise.all(
       imgs.map(async (i) => {
@@ -69,6 +99,7 @@ function UploadArea() {
           width,
           height,
           url: URL.createObjectURL(i),
+          file: i,
         };
       })
     ).then((newFiles) => {
@@ -97,12 +128,19 @@ function UploadArea() {
       unit: "px",
       format: [imgList[0].width, imgList[0].height],
     });
-    pdf.addImage(imgList[0].url, "JPEG", 0, 0, imgList[0].width, imgList[0].height);
+    pdf.addImage(
+      await getImageURL(imgList[0].file),
+      "JPEG",
+      0,
+      0,
+      imgList[0].width,
+      imgList[0].height
+    );
 
     for (let i = 1; i < imgList.length; i++) {
       const img = imgList[i];
       pdf.addPage([img.width, img.height], img.width > img.height ? "l" : "p");
-      pdf.addImage(img.url, "JPEG", 0, 0, img.width, img.height);
+      pdf.addImage(await getImageURL(img.file), "JPEG", 0, 0, img.width, img.height);
     }
 
     const res = pdf.output("bloburl");
@@ -233,6 +271,24 @@ function UploadArea() {
               </p>
             )}
           </div>
+
+          <div className="quality-slider-container">
+            <div className="quality-slider-header">
+              <label htmlFor="quality">Image Quality</label>
+              <span className="quality-value">{Math.round(quality * 100)}%</span>
+            </div>
+            <input
+              id="quality"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={quality}
+              onChange={(e) => setQuality(parseFloat(e.target.value))}
+              className="quality-slider"
+            />
+          </div>
+
           <table className="i2p-img-list">
             <thead>
               <tr>
